@@ -25,7 +25,13 @@ return [
         'dahua_bridge_health_url' => env('GYM_DAHUA_BRIDGE_HEALTH_URL', 'http://127.0.0.1:8787/health'),
         'dahua_bridge_host' => env('GYM_DAHUA_BRIDGE_HOST', '127.0.0.1'),
         'dahua_bridge_port' => (int) env('GYM_DAHUA_BRIDGE_PORT', 8787),
-        'dahua_bridge_python' => env('GYM_DAHUA_BRIDGE_PYTHON', PHP_OS_FAMILY === 'Windows' ? 'python' : 'python3'),
+        'dahua_bridge_python' => env(
+            'GYM_DAHUA_BRIDGE_PYTHON',
+            PHP_OS_FAMILY === 'Windows'
+                ? base_path('runtime/python-3.13.15/python.exe')
+                : 'python3'
+        ),
+        'dahua_bridge_netsdk' => env('GYM_DAHUA_NETSDK_PATH'),
         'dahua_bridge_script' => env('GYM_DAHUA_BRIDGE_SCRIPT', base_path('scripts/dahua_sdk_bridge.py')),
         'dahua_bridge_pid_file' => env('GYM_DAHUA_BRIDGE_PID_FILE', storage_path('app/dahua-bridge.pid')),
         'dahua_bridge_log_file' => env('GYM_DAHUA_BRIDGE_LOG_FILE', storage_path('logs/dahua-bridge.log')),

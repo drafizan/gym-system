@@ -16,7 +16,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SDK_PATHS = [
+    os.environ.get("DAHUA_NETSDK_PATH", ""),
+    os.path.join(APP_ROOT, "runtime", "dahua", "dhnetsdk.dll"),
+    r"C:\Program Files\Dahua\NetSDK\dhnetsdk.dll",
+    r"C:\Program Files (x86)\Dahua\NetSDK\dhnetsdk.dll",
     "/Applications/SmartPSSLite.app/Contents/Frameworks/libdhnetsdk.so",
     "/Applications/ConfigTool.app/Contents/Resources/libs/libdhnetsdk.so",
 ]
@@ -495,12 +500,19 @@ class NetOutCardInfoDoFind(ctypes.Structure):
 
 class DahuaSdk:
     def __init__(self) -> None:
-        sdk_path = next((path for path in SDK_PATHS if os.path.exists(path)), None)
+        sdk_path = next((path for path in SDK_PATHS if path and os.path.exists(path)), None)
         if sdk_path is None:
-            raise RuntimeError("Dahua NetSDK library not found. Install SmartPSS Lite or ConfigTool.")
+            raise RuntimeError(
+                "Dahua NetSDK library not found. Set DAHUA_NETSDK_PATH or place "
+                "dhnetsdk.dll in runtime/dahua/."
+            )
 
         self.sdk_path = sdk_path
-        self.lib = ctypes.CDLL(sdk_path)
+        if os.name == "nt":
+            os.add_dll_directory(os.path.dirname(sdk_path))
+            self.lib = ctypes.WinDLL(sdk_path)
+        else:
+            self.lib = ctypes.CDLL(sdk_path)
         self._configure()
 
         if not self.lib.CLIENT_Init(None, 0):

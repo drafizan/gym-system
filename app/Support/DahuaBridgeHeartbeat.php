@@ -265,26 +265,53 @@ class DahuaBridgeHeartbeat
      */
     private function startBridgeOnWindows(string $script): array
     {
-        $command = sprintf(
-            'cmd /C "set DAHUA_BRIDGE_HOST=%s&& set DAHUA_BRIDGE_PORT=%s&& start /B "" %s -u %s >> %s 2>&1"',
-            (string) config('gym.access.dahua_bridge_host', '127.0.0.1'),
-            (string) config('gym.access.dahua_bridge_port', 8787),
-            escapeshellarg((string) config('gym.access.dahua_bridge_python', 'python')),
-            escapeshellarg($script),
-            escapeshellarg($this->logFile()),
-        );
+        $python = (string) config('gym.access.dahua_bridge_python', 'python');
+        $launcher = base_path('scripts/start_dahua_bridge.py');
 
-        $process = Process::fromShellCommandline($command, base_path(), null, null, 10);
+        if (! File::exists($python)) {
+            return [
+                'ok' => false,
+                'started' => false,
+                'message' => 'Dahua bridge Python runtime not found: '.$python,
+            ];
+        }
+
+        if (! File::exists($launcher)) {
+            return [
+                'ok' => false,
+                'started' => false,
+                'message' => 'Dahua bridge Windows launcher not found: '.$launcher,
+            ];
+        }
+
+        $process = new Process([
+            $python,
+            $launcher,
+            '--python', $python,
+            '--script', $script,
+            '--log', $this->logFile(),
+            '--working-directory', base_path(),
+            '--host', (string) config('gym.access.dahua_bridge_host', '127.0.0.1'),
+            '--port', (string) config('gym.access.dahua_bridge_port', 8787),
+            '--sdk', (string) config('gym.access.dahua_bridge_netsdk', ''),
+        ], base_path(), null, null, 10);
         $process->run();
 
+        $pid = trim($process->getOutput());
+        $started = $process->isSuccessful() && ctype_digit($pid);
+
+        if ($started) {
+            File::put($this->pidFile(), $pid);
+        }
+
         return [
-            'ok' => $process->isSuccessful(),
-            'started' => $process->isSuccessful(),
-            'pid' => null,
-            'message' => $process->isSuccessful()
+            'ok' => $started,
+            'started' => $started,
+            'pid' => $started ? (int) $pid : null,
+            'message' => $started
                 ? 'Dahua bridge start command executed.'
                 : 'Failed to start Dahua bridge.',
-            'error' => $process->isSuccessful() ? null : trim($process->getErrorOutput() ?: $process->getOutput()),
+            'error' => $started ? null : trim($process->getErrorOutput() ?: $process->getOutput()),
         ];
     }
 
