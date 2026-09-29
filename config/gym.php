@@ -3,7 +3,7 @@
 return [
     'multibranch_enabled' => (bool) env('GYM_MULTIBRANCH_ENABLED', false),
     'branch_name' => env('GYM_BRANCH_NAME', 'Main Branch'),
-    'system_version' => env('GYM_SYSTEM_VERSION', 'v1.0'),
+    'system_version' => env('GYM_SYSTEM_VERSION', 'v1.01'),
 
     'members' => [
         'photo_disk' => env('GYM_MEMBER_PHOTO_DISK', 'public'),
