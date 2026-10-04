@@ -3738,3 +3738,22 @@ test('cashiers gain personal training access without losing existing permissions
         $this->get(route($route))->assertOk();
     }
 });
+
+test('cashier personal training menu only shows operational links', function () {
+    $role = roleWithPermissions(['pt.manage']);
+    $role->update(['name' => 'cashier']);
+    $cashier = User::factory()->create(['role_id' => $role->id]);
+    $response = $this->actingAs($cashier)->get(route('pt.schedule.index'))->assertOk();
+    foreach (['pt.trainers.index', 'pt.packages.index', 'pt.reports.commission'] as $route) {
+        $response->assertDontSee('href="'.route($route).'"', false);
+    }
+    foreach (['pt.member-packages.create', 'pt.schedule.index', 'pt.sessions.index'] as $route) {
+        $response->assertSee('href="'.route($route).'"', false);
+    }
+    $response->assertSee('Manage Personal Training');
+    $role->update(['name' => 'manager']);
+    $this->actingAs($cashier->fresh())->get(route('pt.schedule.index'))->assertOk()
+        ->assertSee('href="'.route('pt.trainers.index').'"', false)
+        ->assertSee('href="'.route('pt.packages.index').'"', false)
+        ->assertSee('href="'.route('pt.reports.commission').'"', false);
+});

@@ -60,12 +60,12 @@
                     'permission' => 'pt.manage',
                     'route' => 'pt.schedule.index',
                     'children' => [
-                        ['label' => 'Trainers', 'route' => 'pt.trainers.index'],
-                        ['label' => 'PT Packages', 'route' => 'pt.packages.index'],
+                        ['label' => 'Trainers', 'route' => 'pt.trainers.index', 'hide_for_cashier' => true],
+                        ['label' => 'PT Packages', 'route' => 'pt.packages.index', 'hide_for_cashier' => true],
                         ['label' => 'Assign Package', 'route' => 'pt.member-packages.create'],
                         ['label' => 'Schedule', 'route' => 'pt.schedule.index'],
                         ['label' => 'Session Tracking', 'route' => 'pt.sessions.index'],
-                        ['label' => 'Commission Report', 'route' => 'pt.reports.commission'],
+                        ['label' => 'Commission Report', 'route' => 'pt.reports.commission', 'hide_for_cashier' => true],
                     ],
                 ],
             ],
@@ -186,6 +186,7 @@
                                     </a>
                                 @endif
                                 @foreach ($item['children'] as $child)
+                                    @continue(is_array($child) && ! empty($child['hide_for_cashier']) && $user?->role?->name === 'cashier')
                                     @php
                                         $childLabel = is_array($child) ? $child['label'] : $child;
                                         $childRoute = is_array($child) ? ($child['route'] ?? null) : null;
