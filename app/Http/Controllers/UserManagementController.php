@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Audit;
@@ -16,6 +17,29 @@ class UserManagementController extends Controller
     {
         return view('users.index', [
             'users' => User::query()->with('role')->latest()->get(),
+        ]);
+    }
+
+    public function roles(): View
+    {
+        return view('users.access', [
+            'title' => 'Roles',
+            'records' => Role::query()->with('permissions')->withCount('users')->orderBy('label')->get(),
+        ]);
+    }
+
+    public function permissions(): View
+    {
+        return view('users.access', [
+            'title' => 'Permissions',
+            'records' => Permission::query()->with('roles')->orderBy('label')->get(),
+        ]);
+    }
+
+    public function passwordResets(): View
+    {
+        return view('users.password-resets', [
+            'users' => User::query()->with('role')->orderBy('name')->get(),
         ]);
     }
 

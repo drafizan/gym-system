@@ -3570,3 +3570,33 @@ test('backup routes require backup permission', function () {
         ->get(route('backups.index'))
         ->assertForbidden();
 });
+
+test('users and roles submenu destinations show configured access and password reset links', function () {
+    $role = roleWithPermissions(['users.manage']);
+    $admin = User::factory()->create(['role_id' => $role->id]);
+
+    $this->actingAs($admin)->get(route('users.index'))
+        ->assertOk()
+        ->assertSee(route('users.roles'), false)
+        ->assertSee(route('users.permissions'), false)
+        ->assertSee(route('users.password-resets'), false);
+
+    $this->get(route('users.roles'))->assertOk()->assertSee($role->label)->assertSee($role->permissions()->first()->label);
+    $this->get(route('users.permissions'))->assertOk()->assertSee('users.manage')->assertSee($role->label);
+    $this->get(route('users.password-resets'))->assertOk()
+        ->assertSee($admin->username)
+        ->assertSee(route('users.edit', $admin).'#password', false);
+    $this->get(route('users.edit', $admin))->assertOk()->assertSee('id="password"', false);
+});
+
+test('users and roles submenu destinations enforce user management permission', function () {
+    foreach (['users.roles', 'users.permissions', 'users.password-resets'] as $route) {
+        $this->get(route($route))->assertRedirect(route('login'));
+    }
+
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['dashboard.view'])->id]);
+    $this->actingAs($staff);
+    foreach (['users.roles', 'users.permissions', 'users.password-resets'] as $route) {
+        $this->get(route($route))->assertForbidden();
+    }
+});

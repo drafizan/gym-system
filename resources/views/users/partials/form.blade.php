@@ -27,7 +27,7 @@
 
 <label class="field">
     <span>Password</span>
-    <input type="password" name="password" autocomplete="new-password" {{ $managedUser ? '' : 'required' }}>
+    <input id="password" type="password" name="password" autocomplete="new-password" {{ $managedUser ? '' : 'required' }}>
 </label>
 
 <label class="field">

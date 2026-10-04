@@ -160,6 +160,9 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     Route::middleware('permission:users.manage')->group(function () {
         Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
+        Route::get('/users/roles', [UserManagementController::class, 'roles'])->name('users.roles');
+        Route::get('/users/permissions', [UserManagementController::class, 'permissions'])->name('users.permissions');
+        Route::get('/users/password-resets', [UserManagementController::class, 'passwordResets'])->name('users.password-resets');
         Route::get('/users/create', [UserManagementController::class, 'create'])->name('users.create');
         Route::post('/users', [UserManagementController::class, 'store'])->name('users.store');
         Route::get('/users/{user}/edit', [UserManagementController::class, 'edit'])->name('users.edit');

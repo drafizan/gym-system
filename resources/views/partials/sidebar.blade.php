@@ -100,7 +100,12 @@
                     'label' => 'Users & Roles',
                     'permission' => 'users.manage',
                     'route' => 'users.index',
-                    'children' => ['Users', 'Roles', 'Permissions', 'Password Reset'],
+                    'children' => [
+                        ['label' => 'Users', 'route' => 'users.index'],
+                        ['label' => 'Roles', 'route' => 'users.roles'],
+                        ['label' => 'Permissions', 'route' => 'users.permissions'],
+                        ['label' => 'Password Reset', 'route' => 'users.password-resets'],
+                    ],
                 ],
             ],
         ],
