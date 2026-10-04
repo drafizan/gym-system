@@ -3643,6 +3643,36 @@ h2 {
     text-transform: uppercase;
 }
 
+.backup-history-table {
+    overflow-x: hidden;
+}
+
+.backup-history-table table {
+    table-layout: fixed;
+}
+
+.backup-history-table th,
+.backup-history-table td {
+    padding-right: 10px;
+    padding-left: 10px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.backup-history-table .backup-col-date { width: 13%; }
+.backup-history-table .backup-col-type { width: 7%; }
+.backup-history-table .backup-col-status { width: 8%; }
+.backup-history-table .backup-col-file { width: 35%; }
+.backup-history-table .backup-col-size { width: 7%; }
+.backup-history-table .backup-col-user { width: 8%; }
+.backup-history-table .backup-col-error { width: 16%; }
+.backup-history-table .backup-col-actions { width: 6%; }
+
+.backup-history-table .table-actions {
+    justify-content: flex-end;
+    gap: 4px;
+}
+
 .sidebar-backdrop {
     display: none;
 }

@@ -176,9 +176,29 @@ document.querySelectorAll('[data-camera-preview]').forEach((preview) => {
         preview.srcObject = null;
     };
 
-    const requestCameraStream = () => {
+    const requestCameraStream = async () => {
         if (navigator.mediaDevices?.getUserMedia) {
-            return navigator.mediaDevices.getUserMedia({ video: true });
+            const initialStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const usbCamera = devices.find((device) => (
+                device.kind === 'videoinput'
+                && /usb camera/i.test(device.label)
+            ));
+            const activeDeviceId = initialStream.getVideoTracks()[0]?.getSettings()?.deviceId;
+
+            if (usbCamera?.deviceId && usbCamera.deviceId !== activeDeviceId) {
+                initialStream.getTracks().forEach((track) => track.stop());
+
+                try {
+                    return await navigator.mediaDevices.getUserMedia({
+                        video: { deviceId: { exact: usbCamera.deviceId } },
+                    });
+                } catch {
+                    return navigator.mediaDevices.getUserMedia({ video: true });
+                }
+            }
+
+            return initialStream;
         }
 
         const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
@@ -223,7 +243,8 @@ document.querySelectorAll('[data-camera-preview]').forEach((preview) => {
             await preview.play();
 
             if (status) {
-                status.textContent = 'Camera is ready.';
+                const cameraName = stream.getVideoTracks()[0]?.label || 'Camera';
+                status.textContent = `${cameraName} is ready.`;
             }
         } catch {
             if (status) {

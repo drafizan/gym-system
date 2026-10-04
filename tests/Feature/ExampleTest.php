@@ -3539,7 +3539,7 @@ test('administrator can restore a completed backup after confirmation', function
 
     $this->actingAs($admin)
         ->post(route('backups.restore', $backup), [
-            'restore_confirmation' => 'RESTORE',
+            'restore_confirmation' => ' restore ',
             'current_password' => 'password',
         ])
         ->assertRedirect()

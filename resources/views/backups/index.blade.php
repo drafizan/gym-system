@@ -53,8 +53,18 @@
             <h2>Backup History</h2>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive backup-history-table">
             <table>
+                <colgroup>
+                    <col class="backup-col-date">
+                    <col class="backup-col-type">
+                    <col class="backup-col-status">
+                    <col class="backup-col-file">
+                    <col class="backup-col-size">
+                    <col class="backup-col-user">
+                    <col class="backup-col-error">
+                    <col class="backup-col-actions">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Date</th>

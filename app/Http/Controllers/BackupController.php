@@ -68,9 +68,15 @@ class BackupController extends Controller
 
     public function restore(Request $request, BackupLog $backupLog, BackupManager $backups): RedirectResponse
     {
+        $request->merge([
+            'restore_confirmation' => str($request->input('restore_confirmation'))->trim()->upper()->toString(),
+        ]);
+
         $validated = $request->validate([
             'restore_confirmation' => ['required', 'string', 'in:RESTORE'],
             'current_password' => ['required', 'current_password'],
+        ], [
+            'restore_confirmation.in' => 'Type RESTORE to confirm the backup restore.',
         ]);
 
         Audit::record($request, 'backup', 'restore_started', BackupLog::class, $backupLog->id, null, [
