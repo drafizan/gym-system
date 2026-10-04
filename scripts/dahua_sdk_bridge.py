@@ -16,10 +16,22 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 
-SDK_PATHS = [
-    "/Applications/SmartPSSLite.app/Contents/Frameworks/libdhnetsdk.so",
-    "/Applications/ConfigTool.app/Contents/Resources/libs/libdhnetsdk.so",
-]
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SDK_PATHS = [os.environ.get("DAHUA_NETSDK_PATH", "")]
+if os.name == "nt":
+    SDK_PATHS += [
+        os.path.join(APP_ROOT, "runtime", "dahua", "dhnetsdk.dll"),
+        r"C:\Program Files\Dahua\NetSDK\dhnetsdk.dll",
+        r"C:\Program Files (x86)\Dahua\NetSDK\dhnetsdk.dll",
+    ]
+else:
+    SDK_PATHS += [
+        os.path.join(APP_ROOT, "runtime", "dahua", "libdhnetsdk.so"),
+        "/usr/local/lib/libdhnetsdk.so",
+        "/usr/lib/libdhnetsdk.so",
+        "/Applications/SmartPSSLite.app/Contents/Frameworks/libdhnetsdk.so",
+        "/Applications/ConfigTool.app/Contents/Resources/libs/libdhnetsdk.so",
+    ]
 
 NET_RECORD_ACCESSCTLCARD = 4
 NET_RECORD_ACCESSCTLCARDREC_EX = 16
@@ -495,12 +507,19 @@ class NetOutCardInfoDoFind(ctypes.Structure):
 
 class DahuaSdk:
     def __init__(self) -> None:
-        sdk_path = next((path for path in SDK_PATHS if os.path.exists(path)), None)
+        sdk_path = next((path for path in SDK_PATHS if path and os.path.exists(path)), None)
         if sdk_path is None:
-            raise RuntimeError("Dahua NetSDK library not found. Install SmartPSS Lite or ConfigTool.")
+            raise RuntimeError(
+                "Dahua NetSDK library not found. Set DAHUA_NETSDK_PATH or place "
+                "the platform SDK (dhnetsdk.dll on Windows, libdhnetsdk.so on Linux) in runtime/dahua/."
+            )
 
         self.sdk_path = sdk_path
-        self.lib = ctypes.CDLL(sdk_path)
+        if os.name == "nt":
+            self._dll_directory = os.add_dll_directory(os.path.dirname(os.path.abspath(sdk_path)))
+            self.lib = ctypes.WinDLL(sdk_path)
+        else:
+            self.lib = ctypes.CDLL(sdk_path)
         self._configure()
 
         if not self.lib.CLIENT_Init(None, 0):
@@ -1435,7 +1454,7 @@ class DahuaSdk:
         }
 
 
-SDK = DahuaSdk()
+SDK: DahuaSdk
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -1507,6 +1526,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    SDK = DahuaSdk()
     host = os.environ.get("DAHUA_BRIDGE_HOST", "127.0.0.1")
     port = int(os.environ.get("DAHUA_BRIDGE_PORT", "8787"))
     print(f"MACS Dahua SDK bridge listening on http://{host}:{port}")

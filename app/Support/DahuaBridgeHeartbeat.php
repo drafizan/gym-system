@@ -5,6 +5,7 @@ namespace App\Support;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -205,86 +206,63 @@ class DahuaBridgeHeartbeat
         File::ensureDirectoryExists(dirname($this->pidFile()));
         File::ensureDirectoryExists(dirname($this->logFile()));
 
-        if (PHP_OS_FAMILY === 'Windows') {
-            return $this->startBridgeOnWindows($script);
-        }
-
-        return $this->startBridgeOnUnix($script);
+        return $this->startBridgeProcess($script);
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function startBridgeOnUnix(string $script): array
+    private function startBridgeProcess(string $script): array
     {
-        $command = sprintf(
-            'DAHUA_BRIDGE_HOST=%s DAHUA_BRIDGE_PORT=%s nohup %s -u %s >> %s 2>&1 & echo $!',
-            escapeshellarg((string) config('gym.access.dahua_bridge_host', '127.0.0.1')),
-            escapeshellarg((string) config('gym.access.dahua_bridge_port', 8787)),
-            escapeshellcmd((string) config('gym.access.dahua_bridge_python', 'python3')),
-            escapeshellarg($script),
-            escapeshellarg($this->logFile()),
-        );
+        $python = (string) config('gym.access.dahua_bridge_python', 'python');
+        $launcher = base_path('scripts/start_dahua_bridge.py');
 
-        $cwd = getcwd();
-        chdir(base_path());
+        $python = (new ExecutableFinder)->find($python) ?? $python;
 
-        $output = [];
-        $exitCode = 1;
-        exec($command, $output, $exitCode);
-
-        if ($cwd !== false) {
-            chdir($cwd);
-        }
-
-        if ($exitCode !== 0) {
+        if (! is_file($python)) {
             return [
                 'ok' => false,
                 'started' => false,
-                'message' => 'Failed to start Dahua bridge.',
-                'error' => trim(implode(PHP_EOL, $output)),
+                'message' => 'Dahua bridge Python runtime not found: '.$python,
             ];
         }
 
-        $pid = trim((string) ($output[0] ?? ''));
+        if (! File::exists($launcher)) {
+            return [
+                'ok' => false,
+                'started' => false,
+                'message' => 'Dahua bridge launcher not found: '.$launcher,
+            ];
+        }
 
-        if ($pid !== '' && ctype_digit($pid)) {
+        $process = new Process([
+            $python,
+            $launcher,
+            '--python', $python,
+            '--script', $script,
+            '--log', $this->logFile(),
+            '--working-directory', base_path(),
+            '--host', (string) config('gym.access.dahua_bridge_host', '127.0.0.1'),
+            '--port', (string) config('gym.access.dahua_bridge_port', 8787),
+            '--sdk', (string) config('gym.access.dahua_bridge_netsdk', ''),
+        ], base_path(), null, null, 10);
+        $process->run();
+
+        $pid = trim($process->getOutput());
+        $started = $process->isSuccessful() && ctype_digit($pid);
+
+        if ($started) {
             File::put($this->pidFile(), $pid);
         }
 
         return [
-            'ok' => true,
-            'started' => true,
-            'pid' => ctype_digit($pid) ? (int) $pid : null,
-            'message' => 'Dahua bridge start command executed.',
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function startBridgeOnWindows(string $script): array
-    {
-        $command = sprintf(
-            'cmd /C "set DAHUA_BRIDGE_HOST=%s&& set DAHUA_BRIDGE_PORT=%s&& start /B "" %s -u %s >> %s 2>&1"',
-            (string) config('gym.access.dahua_bridge_host', '127.0.0.1'),
-            (string) config('gym.access.dahua_bridge_port', 8787),
-            escapeshellarg((string) config('gym.access.dahua_bridge_python', 'python')),
-            escapeshellarg($script),
-            escapeshellarg($this->logFile()),
-        );
-
-        $process = Process::fromShellCommandline($command, base_path(), null, null, 10);
-        $process->run();
-
-        return [
-            'ok' => $process->isSuccessful(),
-            'started' => $process->isSuccessful(),
-            'pid' => null,
-            'message' => $process->isSuccessful()
+            'ok' => $started,
+            'started' => $started,
+            'pid' => $started ? (int) $pid : null,
+            'message' => $started
                 ? 'Dahua bridge start command executed.'
                 : 'Failed to start Dahua bridge.',
-            'error' => $process->isSuccessful() ? null : trim($process->getErrorOutput() ?: $process->getOutput()),
+            'error' => $started ? null : trim($process->getErrorOutput() ?: $process->getOutput()),
         ];
     }
 

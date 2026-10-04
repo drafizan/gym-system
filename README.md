@@ -1,3 +1,9 @@
+# Gym Management System
+
+One shared application supports Windows, Linux, and the existing macOS setup.
+See [platform setup and branch comparison](docs/platform-unification.md) and
+[deployment notes](docs/deployment-notes.md).
+
 # Gym Management System MD Specification Pack
 
 This ZIP contains module-by-module development specifications for the accepted RM13,800 gym membership and access control project.

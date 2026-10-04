@@ -19,6 +19,9 @@ The system is intended to run on a trusted local machine inside the gym network 
 - Expired membership access sync: daily at 9:00 PM
 - Automatic backup: daily or weekly at 10:00 PM, based on Settings
 
+For Windows/Linux runtime paths and SDK installation, see
+[the shared platform guide](platform-unification.md).
+
 ## Required Software
 
 - PHP 8.4 or compatible Laravel-supported PHP version
