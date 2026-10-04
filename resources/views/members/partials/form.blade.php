@@ -249,7 +249,6 @@
                     </label>
                     <div class="field form-span-2"><span>Total</span><strong data-registration-total>RM {{ number_format((float) $membershipAmount + ($member->exists ? 0 : $registrationFee), 2) }}</strong></div>
                 </div>
-                <p>Membership validity changes only after payment is completed in POS. Saving this form or leaving checkout unfinished does not activate or extend membership. Renewals do not include the registration fee.</p>
             </section>
         @endif
 
