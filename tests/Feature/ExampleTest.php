@@ -3577,7 +3577,7 @@ test('users and roles submenu destinations show configured access and password r
 
     $this->actingAs($admin)->get(route('users.index'))
         ->assertOk()
-        ->assertSee(route('users.roles'), false)
+        ->assertDontSee('href="'.route('users.roles').'"', false)
         ->assertSee(route('users.permissions'), false)
         ->assertSee(route('users.password-resets'), false);
 
