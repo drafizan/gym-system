@@ -3348,7 +3348,7 @@ test('dashboard page stays under the local network load target', function () {
 test('system settings backend returns defaults and validates updates', function () {
     $settings = app(SystemSettings::class);
 
-    expect($settings->get('gym_name'))->toBe('Gorilla Mutantz Gym')
+    expect($settings->get('gym_name'))->toBe('Gorilla Mutantz Gym Sdn Bhd')
         ->and($settings->get('company_name'))->toBe('Gorilla Mutantz Gym Sdn Bhd')
         ->and($settings->integer('expiring_soon_days'))->toBe(7)
         ->and($settings->paymentMethods())->toContain('cash');
