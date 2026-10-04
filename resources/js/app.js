@@ -454,7 +454,13 @@ document.querySelectorAll('[data-membership-package-select]').forEach((select) =
         }
 
         const endDate = new Date(`${startDateInput.value}T00:00:00`);
-        endDate.setDate(endDate.getDate() + durationDays - 1);
+        const existingExpiry = select.dataset.existingExpiry ? new Date(`${select.dataset.existingExpiry}T00:00:00`) : null;
+        if (existingExpiry && existingExpiry >= endDate) {
+            endDate.setTime(existingExpiry.getTime());
+            endDate.setDate(endDate.getDate() + durationDays);
+        } else {
+            endDate.setDate(endDate.getDate() + durationDays - 1);
+        }
         endDateInput.value = formatDate(endDate);
     };
 
@@ -893,7 +899,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         syncItemMode();
         const selected = selectedItems();
         const fee = form.querySelector('[data-pos-registration-fee]');
-        if (fee) {
+        if (fee && Number(fee.value) > 0) {
             const amount = Number(fee.value);
             selected.items.push({ label: 'Registration Fee', quantity: 1, unitPrice: amount, subtotal: amount, discount: 0 });
         }

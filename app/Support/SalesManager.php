@@ -64,7 +64,7 @@ class SalesManager
                 $subtotal += $this->createMembershipSaleItem($request, $sale, $saleType, $member, $data);
             }
 
-            if ($saleType === SaleType::MembershipSale && isset($data['registration_fee'])) {
+            if ($saleType === SaleType::MembershipSale && (float) ($data['registration_fee'] ?? 0) > 0) {
                 $fee = (float) $data['registration_fee'];
                 $sale->items()->create([
                     'description' => 'Registration Fee',
@@ -233,6 +233,7 @@ class SalesManager
             'unit_price' => $amount,
             'total' => $amount,
             'metadata' => [
+                'registration_checkout_token' => $data['registration_checkout_token'] ?? null,
                 'duration_days' => $package->duration_days,
                 'start_date' => $membership->start_date->toDateString(),
                 'end_date' => $membership->end_date->toDateString(),

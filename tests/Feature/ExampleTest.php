@@ -3683,3 +3683,37 @@ test('automated tests cannot launch the native dahua bridge', function () {
     expect($result['started'])->toBeFalse()
         ->and($result['message'])->toContain('disabled during automated tests');
 });
+
+test('editing a member prefills renewal POS without a registration fee', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['members.manage', 'sales.manage'])->id]);
+    $member = Member::factory()->create();
+    $package = MembershipPackage::factory()->create(['price' => 150, 'duration_days' => 30]);
+    $membership = MemberMembership::factory()->create([
+        'member_id' => $member->id, 'membership_package_id' => $package->id,
+        'start_date' => now()->toDateString(), 'end_date' => now()->addDays(10)->toDateString(),
+    ]);
+    $this->actingAs($staff)->get(route('members.edit', $member))->assertOk()
+        ->assertSee('POS Summary')->assertSee('Save &amp; Continue to POS', false)
+        ->assertDontSee('Registration Fee (one time)');
+    $response = $this->put(route('members.update', $member), [
+        'registration_checkout' => 1, 'full_name' => 'Updated Checkout Member', 'phone' => '+60123456789',
+        'membership_package_id' => $package->id, 'membership_start_date' => now()->toDateString(),
+        'membership_end_date' => now()->addDays(40)->toDateString(),
+        'membership_amount' => 140, 'membership_payment_method' => 'cash',
+    ])->assertRedirect();
+    expect($membership->fresh()->end_date->toDateString())->toBe(now()->addDays(10)->toDateString());
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+    $token = $query['registration_checkout'];
+    $draft = session('registration_checkouts.'.$token);
+    expect($draft['sale_type'])->toBe('membership_renewal')->and($draft['registration_fee'])->toBe(0);
+    $this->get($response->headers->get('Location'))->assertOk()->assertSee('No registration fee.');
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'cash'])->assertRedirect();
+    $sale = Sale::query()->firstOrFail();
+    expect((float) $sale->total)->toBe(140.0)->and($sale->items()->count())->toBe(1)
+        ->and($sale->items()->where('description', 'Registration Fee')->count())->toBe(0)
+        ->and($member->latestMembership()->first()->end_date->toDateString())->toBe(now()->addDays(40)->toDateString());
+    $this->withSession(['registration_checkouts' => [$token => $draft]])
+        ->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'cash'])
+        ->assertRedirect(route('sales.receipt', $sale));
+    expect(Sale::query()->count())->toBe(1)->and($member->memberships()->count())->toBe(2);
+});

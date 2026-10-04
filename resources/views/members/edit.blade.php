@@ -21,7 +21,7 @@
         @method('PUT')
         @include('members.partials.form', [
             'cancelUrl' => route('members.show', $member),
-            'submitLabel' => 'Save Changes',
+            'submitLabel' => 'Save & Continue to POS',
             'showSaveAnother' => false,
         ])
     </form>

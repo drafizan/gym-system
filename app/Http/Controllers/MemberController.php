@@ -342,13 +342,15 @@ class MemberController extends Controller
     {
         return view('members.edit', [
             'member' => $member->load(['latestMembership.package']),
-            ...$this->memberFormOptions(false, $member),
+            ...$this->memberFormOptions(true, $member),
         ]);
     }
 
     public function update(MemberRequest $request, Member $member): RedirectResponse
     {
         $validated = $request->safe()->except([
+            'registration_checkout',
+            'save_profile_only',
             'photo',
             'captured_photo',
             'membership_package_id',
@@ -368,10 +370,31 @@ class MemberController extends Controller
         }
 
         $member->update($validated);
-        $this->updateLatestMembershipExpiry($request, $member);
+        if (! $request->boolean('registration_checkout') && ! $request->boolean('save_profile_only')) {
+            $this->updateLatestMembershipExpiry($request, $member);
+        }
         app(RfidCardManager::class)->syncMemberCardInput($request, $member->fresh(), $rfidCardNumber);
 
         Audit::record($request, 'members', 'updated', Member::class, $member->id, $oldValues, $member->fresh()->toArray());
+
+        if ($request->boolean('registration_checkout')) {
+            $token = (string) Str::uuid();
+            $package = MembershipPackage::query()->findOrFail($request->integer('membership_package_id'));
+            $request->session()->put('registration_checkouts.'.$token, [
+                'member_id' => $member->id,
+                'sale_type' => $member->memberships()->exists() ? SaleType::MembershipRenewal->value : SaleType::MembershipSale->value,
+                'membership_package_id' => $package->id,
+                'start_date' => $request->input('membership_start_date') ?: now()->toDateString(),
+                'end_date' => $request->input('membership_end_date'),
+                'membership_amount' => $request->input('membership_amount') ?? $package->price,
+                'payment_method' => $request->input('membership_payment_method') ?: 'cash',
+                'registration_fee' => 0,
+                'registration_checkout_token' => $token,
+            ]);
+
+            return redirect()->route('sales.pos', ['registration_checkout' => $token])
+                ->with('success', 'Member updated. Complete the membership payment in POS.');
+        }
 
         return redirect()->route('members.show', $member)->with('success', 'Member updated successfully.');
     }

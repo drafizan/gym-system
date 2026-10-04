@@ -9,8 +9,8 @@
     $memberPhotoUrl = $member->photo_path ? Storage::disk(config('gym.members.photo_disk'))->url($member->photo_path) : null;
     $currentMembership = $member->latestMembership;
     $selectedPackageId = old('membership_package_id', $currentMembership?->membership_package_id);
-    $membershipStartDate = old('membership_start_date', $currentMembership?->start_date?->format('Y-m-d') ?? now()->format('Y-m-d'));
-    $membershipEndDate = old('membership_end_date', $currentMembership?->end_date?->format('Y-m-d'));
+    $membershipStartDate = old('membership_start_date', ($member->exists && $allowMembershipSetup) ? now()->format('Y-m-d') : ($currentMembership?->start_date?->format('Y-m-d') ?? now()->format('Y-m-d')));
+    $membershipEndDate = old('membership_end_date', ($member->exists && $allowMembershipSetup) ? null : $currentMembership?->end_date?->format('Y-m-d'));
     $membershipAmount = old('membership_amount', $currentMembership?->amount);
     $membershipPaymentMethod = old('membership_payment_method', 'cash');
     $membershipPaymentStatus = old('membership_payment_status', $currentMembership?->payment_status ?? 'paid');
@@ -153,7 +153,10 @@
                 </label>
 
                 <div class="registration-actions">
-                    <button class="btn btn-primary" type="submit">{{ $submitLabel }}</button>
+                    <button class="btn btn-primary" type="submit" @if ($member->exists) name="registration_checkout" value="1" @endif>{{ $submitLabel }}</button>
+                    @if ($member->exists)
+                        <button class="btn btn-light" type="submit" name="save_profile_only" value="1">Save Profile Only</button>
+                    @endif
                     @if ($showSaveAnother)
                         <button class="btn btn-light" type="submit" name="save_and_add" value="1">Save & Add Another</button>
                     @endif
@@ -166,10 +169,13 @@
     <div class="registration-side">
         <section class="registration-card">
             <h2>Membership Information</h2>
+            @if ($member->exists && $currentMembership)
+                <p>Current membership: {{ $currentMembership->start_date?->format('Y-m-d') }} to {{ $currentMembership->end_date?->format('Y-m-d') }}. The fields below prepare the next membership payment.</p>
+            @endif
             <div class="form-grid compact">
                 <label class="field form-span-2">
                     <span>Membership Type</span>
-                    <select name="membership_package_id" @required(! $member->exists) data-membership-package-select @disabled(! $allowMembershipSetup)>
+                    <select name="membership_package_id" @required(! $member->exists) data-membership-package-select data-existing-expiry="{{ $member->exists ? $currentMembership?->end_date?->format('Y-m-d') : '' }}" @disabled(! $allowMembershipSetup)>
                         <option value="">Select membership type</option>
                         @foreach ($membershipPackages as $package)
                             <option
@@ -202,7 +208,7 @@
                     <input type="number" name="membership_amount" min="0" step="0.01" value="{{ $membershipAmount }}" placeholder="Enter amount" data-membership-amount @disabled(! $allowMembershipSetup)>
                 </label>
 
-                @if ($member->exists)
+                @if ($member->exists && ! $allowMembershipSetup)
                 <label class="field">
                     <span>Payment Method</span>
                     <select name="membership_payment_method" @disabled(! $allowMembershipSetup)>
@@ -225,12 +231,14 @@
             </div>
         </section>
 
-        @if (! $member->exists)
-            <section class="registration-card" data-registration-pos data-registration-fee="{{ $registrationFee }}">
+        @if ($allowMembershipSetup)
+            <section class="registration-card" data-registration-pos data-registration-fee="{{ $member->exists ? 0 : $registrationFee }}">
                 <h2>POS Summary</h2>
                 <div class="form-grid compact">
                     <div class="field"><span>Membership</span><strong data-registration-membership-total>RM {{ number_format((float) $membershipAmount, 2) }}</strong></div>
+                    @if (! $member->exists)
                     <div class="field"><span>Registration Fee (one time)</span><strong>RM {{ number_format($registrationFee, 2) }}</strong></div>
+                    @endif
                     <label class="field form-span-2">
                         <span>Payment Method</span>
                         <select name="membership_payment_method">
@@ -239,7 +247,7 @@
                             @endforeach
                         </select>
                     </label>
-                    <div class="field form-span-2"><span>Total</span><strong data-registration-total>RM {{ number_format((float) $membershipAmount + $registrationFee, 2) }}</strong></div>
+                    <div class="field form-span-2"><span>Total</span><strong data-registration-total>RM {{ number_format((float) $membershipAmount + ($member->exists ? 0 : $registrationFee), 2) }}</strong></div>
                 </div>
                 <p>Save to review and complete this payment in POS. Renewals do not include the registration fee.</p>
             </section>

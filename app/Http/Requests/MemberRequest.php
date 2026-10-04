@@ -40,6 +40,7 @@ class MemberRequest extends FormRequest
                 Rule::notIn(array_filter([$this->member()?->id])),
             ],
             'registration_checkout' => ['sometimes', 'boolean'],
+            'save_profile_only' => ['sometimes', 'boolean'],
             'membership_package_id' => ['required_if:registration_checkout,1', 'nullable', 'exists:membership_packages,id'],
             'membership_start_date' => ['nullable', 'date'],
             'membership_end_date' => ['nullable', 'date', 'after_or_equal:membership_start_date'],

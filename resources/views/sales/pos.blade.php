@@ -49,7 +49,7 @@
             <input type="hidden" name="end_date" value="{{ $checkout['end_date'] }}">
             <input type="hidden" name="membership_amount" value="{{ $checkout['membership_amount'] }}" data-pos-membership-amount>
             <input type="hidden" value="{{ $checkout['registration_fee'] }}" data-pos-registration-fee>
-            <p class="form-span-2">New member checkout · Starts {{ $checkout['start_date'] }} · Registration Fee RM {{ number_format($checkout['registration_fee'], 2) }} included.</p>
+            <p class="form-span-2">{{ $checkout['registration_fee'] > 0 ? 'New member checkout' : 'Membership checkout' }} · Starts {{ $checkout['start_date'] }}@if ($checkout['registration_fee'] > 0) · Registration Fee RM {{ number_format($checkout['registration_fee'], 2) }} included.@else · No registration fee.@endif</p>
         @endif
 
         <section class="pos-card pos-entry-panel">
