@@ -65,6 +65,18 @@ document.addEventListener('keydown', (event) => {
     document.querySelectorAll('[data-modal].is-open').forEach(closeModal);
 });
 
+document.querySelectorAll('[data-rfid-reader]').forEach((input) => {
+    input.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+});
+
 document.querySelectorAll('[data-sales-tabs]').forEach((tabs) => {
     const card = tabs.closest('.sales-details-card');
     const rows = Array.from(card?.querySelectorAll('[data-sales-category]') ?? []);

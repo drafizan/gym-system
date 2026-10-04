@@ -290,9 +290,9 @@
                     <span class="field-label">RFID Card</span>
                     <label class="field">
                         <span>Card Number</span>
-                        <input type="text" name="rfid_card_number" value="{{ old('rfid_card_number', $member->rfid_card_number) }}" placeholder="Enter card number manually">
+                        <input type="text" name="rfid_card_number" value="{{ old('rfid_card_number', $member->rfid_card_number) }}" placeholder="Scan or enter card number" autocomplete="off" data-rfid-reader>
                     </label>
-                    <p class="field-help">Manual entry only until RFID card management is active.</p>
+                    <p class="field-help">Scan the card with the RFID reader. The reader's Enter suffix will not submit this form.</p>
                 </div>
             </div>
         </section>
