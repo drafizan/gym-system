@@ -3721,3 +3721,20 @@ test('editing a member prefills renewal POS without a registration fee', functio
         ->assertRedirect(route('sales.receipt', $sale));
     expect(Sale::query()->count())->toBe(1)->and($member->memberships()->count())->toBe(2);
 });
+
+test('cashiers gain personal training access without losing existing permissions', function () {
+    $role = roleWithPermissions(['dashboard.view', 'members.manage', 'sales.manage']);
+    $role->update(['name' => 'cashier', 'label' => 'Cashier']);
+    $migration = require database_path('migrations/2026_10_04_000001_grant_cashiers_personal_training_access.php');
+    $migration->up();
+    $migration->up();
+    $cashier = User::factory()->create(['role_id' => $role->id]);
+    expect($cashier->hasPermission('pt.manage'))->toBeTrue()
+        ->and($cashier->hasPermission('sales.manage'))->toBeTrue()
+        ->and($cashier->hasPermission('users.manage'))->toBeFalse()
+        ->and($role->permissions()->count())->toBe(4);
+    $this->actingAs($cashier);
+    foreach (['pt.trainers.index', 'pt.member-packages.create', 'pt.schedule.index', 'pt.sessions.index'] as $route) {
+        $this->get(route($route))->assertOk();
+    }
+});

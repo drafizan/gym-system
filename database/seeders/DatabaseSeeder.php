@@ -74,7 +74,7 @@ class DatabaseSeeder extends Seeder
 
         $administrator->permissions()->sync($permissions->pluck('id'));
         $manager->permissions()->sync($permissions->except(['users.manage', 'backup.manage', 'settings.manage'])->pluck('id'));
-        $cashier->permissions()->sync($permissions->only(['dashboard.view', 'members.manage', 'sales.manage', 'reports.view'])->pluck('id'));
+        $cashier->permissions()->sync($permissions->only(['dashboard.view', 'members.manage', 'sales.manage', 'reports.view', 'pt.manage'])->pluck('id'));
 
         User::query()->updateOrCreate([
             'email' => 'admin@gorillamutanz.test',
