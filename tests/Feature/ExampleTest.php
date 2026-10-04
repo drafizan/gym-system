@@ -1058,8 +1058,8 @@ test('users with permission can register members with automatic member number', 
         ->and($member->rfid_card_number)->toBe('RFID-10001')
         ->and($member->referred_by_member_id)->toBe($activeReferrer->id)
         ->and($member->created_by)->toBe($user->id)
-        ->and(MemberMembership::query()->where('member_id', $member->id)->where('membership_package_id', $package->id)->exists())->toBeTrue()
-        ->and(Sale::query()->where('member_id', $member->id)->where('sale_type', SaleType::MembershipSale->value)->exists())->toBeTrue()
+        ->and(MemberMembership::query()->where('member_id', $member->id)->where('membership_package_id', $package->id)->exists())->toBeFalse()
+        ->and(Sale::query()->where('member_id', $member->id)->where('sale_type', SaleType::MembershipSale->value)->exists())->toBeFalse()
         ->and(AuditLog::query()->where('module', 'members')->where('action', 'created')->exists())->toBeTrue();
 
     $this->actingAs($user)
@@ -1071,7 +1071,7 @@ test('users with permission can register members with automatic member number', 
         ->assertSessionHasErrors('referred_by_member_id');
 });
 
-test('member edit shows existing membership information and allows expiry date update', function () {
+test('member edit shows existing membership information but cannot change validity without POS', function () {
     $user = User::factory()->create([
         'role_id' => roleWithPermissions(['members.manage'])->id,
     ]);
@@ -1110,8 +1110,8 @@ test('member edit shows existing membership information and allows expiry date u
         ])
         ->assertRedirect(route('members.show', $member));
 
-    expect($membership->fresh()->end_date->format('Y-m-d'))->toBe('2026-07-17')
-        ->and(AuditLog::query()->where('module', 'memberships')->where('action', 'expiry_updated')->exists())->toBeTrue();
+    expect($membership->fresh()->end_date->format('Y-m-d'))->toBe('2026-07-18')
+        ->and(AuditLog::query()->where('module', 'memberships')->where('action', 'expiry_updated')->exists())->toBeFalse();
 });
 
 test('member edit card number changes queue rfid sync with membership validity', function () {
@@ -3707,6 +3707,10 @@ test('editing a member prefills renewal POS without a registration fee', functio
     $draft = session('registration_checkouts.'.$token);
     expect($draft['sale_type'])->toBe('membership_renewal')->and($draft['registration_fee'])->toBe(0);
     $this->get($response->headers->get('Location'))->assertOk()->assertSee('No registration fee.');
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token])->assertSessionHasErrors('payment_method');
+    expect($member->memberships()->count())->toBe(1)
+        ->and($membership->fresh()->end_date->toDateString())->toBe(now()->addDays(10)->toDateString())
+        ->and(Sale::query()->count())->toBe(0);
     $this->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'cash'])->assertRedirect();
     $sale = Sale::query()->firstOrFail();
     expect((float) $sale->total)->toBe(140.0)->and($sale->items()->count())->toBe(1)

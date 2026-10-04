@@ -2,26 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AccessSyncAction;
 use App\Enums\MembershipStatus;
 use App\Enums\RecordStatus;
 use App\Enums\SaleType;
 use App\Http\Requests\MemberRequest;
-use App\Models\AccessSyncLog;
 use App\Models\Member;
-use App\Models\MemberMembership;
 use App\Models\MembershipPackage;
 use App\Support\Audit;
-use App\Support\MembershipPeriod;
 use App\Support\RegistrationCheckout;
 use App\Support\RfidCardManager;
-use App\Support\SalesManager;
 use App\Support\SystemSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -300,9 +294,6 @@ class MemberController extends Controller
         $member = Member::query()->create($validated);
 
         Audit::record($request, 'members', 'created', Member::class, $member->id, null, $member->toArray());
-        if (! $request->boolean('registration_checkout')) {
-            $this->createInitialMembership($request, $member);
-        }
         app(RfidCardManager::class)->syncMemberCardInput($request, $member, $rfidCardNumber);
 
         if ($request->boolean('registration_checkout')) {
@@ -370,9 +361,6 @@ class MemberController extends Controller
         }
 
         $member->update($validated);
-        if (! $request->boolean('registration_checkout') && ! $request->boolean('save_profile_only')) {
-            $this->updateLatestMembershipExpiry($request, $member);
-        }
         app(RfidCardManager::class)->syncMemberCardInput($request, $member->fresh(), $rfidCardNumber);
 
         Audit::record($request, 'members', 'updated', Member::class, $member->id, $oldValues, $member->fresh()->toArray());
@@ -445,89 +433,6 @@ class MemberController extends Controller
                 ->orderBy('full_name')
                 ->get(['id', 'member_no', 'full_name', 'phone']),
         ];
-    }
-
-    private function createInitialMembership(MemberRequest $request, Member $member): void
-    {
-        if (! $request->filled('membership_package_id')) {
-            return;
-        }
-
-        $package = MembershipPackage::query()->findOrFail($request->integer('membership_package_id'));
-        $startDate = Carbon::parse($request->input('membership_start_date', now()->toDateString()))->startOfDay();
-        $endDate = $request->filled('membership_end_date')
-            ? Carbon::parse($request->input('membership_end_date'))->startOfDay()
-            : MembershipPeriod::endDateFromStart($startDate, $package->duration_days);
-        $amount = $request->input('membership_amount', $package->price);
-        $paymentStatus = $request->input('membership_payment_status', 'paid');
-
-        if ($paymentStatus === 'paid') {
-            app(SalesManager::class)->complete($request, [
-                'sale_type' => SaleType::MembershipSale->value,
-                'member_id' => $member->id,
-                'membership_package_id' => $package->id,
-                'start_date' => $startDate->toDateString(),
-                'membership_amount' => $amount,
-                'payment_method' => $request->input('membership_payment_method', 'cash'),
-            ]);
-
-            return;
-        }
-
-        $membership = MemberMembership::query()->create([
-            'member_id' => $member->id,
-            'membership_package_id' => $package->id,
-            'start_date' => $startDate->toDateString(),
-            'end_date' => $endDate->toDateString(),
-            'status' => MembershipStatus::Active->value,
-            'payment_status' => 'unpaid',
-            'amount' => $amount,
-            'created_by' => $request->user()->id,
-            'updated_by' => $request->user()->id,
-        ]);
-
-        Audit::record($request, 'memberships', 'assigned', MemberMembership::class, $membership->id, null, $membership->toArray());
-
-        AccessSyncLog::query()->create([
-            'member_id' => $member->id,
-            'member_membership_id' => $membership->id,
-            'action' => $package->access_allowed ? AccessSyncAction::EnableCard->value : AccessSyncAction::DisableCard->value,
-            'status' => 'pending',
-            'payload' => [
-                'member_no' => $member->member_no,
-                'rfid_card_number' => $member->rfid_card_number,
-                'membership_status' => $membership->status,
-                'start_date' => $membership->start_date?->toDateString(),
-                'end_date' => $membership->end_date?->toDateString(),
-            ],
-        ]);
-    }
-
-    private function updateLatestMembershipExpiry(MemberRequest $request, Member $member): void
-    {
-        if (! $request->filled('membership_end_date')) {
-            return;
-        }
-
-        $membership = $member->latestMembership()->first();
-
-        if (! $membership) {
-            return;
-        }
-
-        $endDate = Carbon::parse($request->input('membership_end_date'))->startOfDay();
-
-        if ($membership->end_date->isSameDay($endDate)) {
-            return;
-        }
-
-        $oldValues = $membership->only(['end_date']);
-        $membership->update([
-            'end_date' => $endDate->toDateString(),
-            'updated_by' => $request->user()->id,
-        ]);
-
-        Audit::record($request, 'memberships', 'expiry_updated', MemberMembership::class, $membership->id, $oldValues, $membership->only(['end_date']));
     }
 
     private function storePhoto(Request $request): ?string
