@@ -8,6 +8,7 @@ use App\Enums\SaleType;
 use App\Http\Requests\MemberRequest;
 use App\Models\Member;
 use App\Models\MembershipPackage;
+use App\Services\AccessSyncManager;
 use App\Support\Audit;
 use App\Support\RegistrationCheckout;
 use App\Support\RfidCardManager;
@@ -381,9 +382,11 @@ class MemberController extends Controller
         return redirect()->route('members.show', $member)->with('success', 'Member updated successfully.');
     }
 
-    public function suspend(Request $request, Member $member): RedirectResponse
+    public function suspend(Request $request, Member $member, AccessSyncManager $accessSync): RedirectResponse
     {
-        DB::transaction(function () use ($request, $member): void {
+        $cardDeactivated = false;
+
+        DB::transaction(function () use ($request, $member, &$cardDeactivated): void {
             $oldValues = $member->only(['status']);
             $member->update([
                 'status' => RecordStatus::Suspended->value,
@@ -392,10 +395,15 @@ class MemberController extends Controller
 
             if ($activeCard = $member->activeRfidCard()->first()) {
                 app(RfidCardManager::class)->deactivate($request, $activeCard, 'Member suspended');
+                $cardDeactivated = true;
             }
 
             Audit::record($request, 'members', 'suspended', Member::class, $member->id, $oldValues, $member->only(['status']));
         });
+
+        if ($cardDeactivated) {
+            $accessSync->syncPending(50);
+        }
 
         return back()->with('success', 'Member suspended successfully.');
     }
