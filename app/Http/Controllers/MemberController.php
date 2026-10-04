@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -382,13 +383,19 @@ class MemberController extends Controller
 
     public function suspend(Request $request, Member $member): RedirectResponse
     {
-        $oldValues = $member->only(['status']);
-        $member->update([
-            'status' => RecordStatus::Suspended->value,
-            'updated_by' => $request->user()->id,
-        ]);
+        DB::transaction(function () use ($request, $member): void {
+            $oldValues = $member->only(['status']);
+            $member->update([
+                'status' => RecordStatus::Suspended->value,
+                'updated_by' => $request->user()->id,
+            ]);
 
-        Audit::record($request, 'members', 'suspended', Member::class, $member->id, $oldValues, $member->only(['status']));
+            if ($activeCard = $member->activeRfidCard()->first()) {
+                app(RfidCardManager::class)->deactivate($request, $activeCard, 'Member suspended');
+            }
+
+            Audit::record($request, 'members', 'suspended', Member::class, $member->id, $oldValues, $member->only(['status']));
+        });
 
         return back()->with('success', 'Member suspended successfully.');
     }

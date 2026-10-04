@@ -37,7 +37,9 @@
             <div><span>Status</span><strong>{{ str($card->status)->headline() }}</strong></div>
         </div>
 
-        @unless ($card->isActive())
+        @if (! $card->member || $card->member->status !== \App\Enums\RecordStatus::Active->value)
+            <div class="alert alert-warning">RFID cards can only be activated for active members. Reactivate this member before updating the card.</div>
+        @elseif (! $card->isActive())
             <div class="alert alert-warning">Only active RFID cards can be updated.</div>
         @else
             <form class="stacked-form" method="POST" action="{{ route('rfid-cards.store-replacement', $card) }}">
@@ -62,6 +64,6 @@
                     <button class="btn btn-primary" type="submit">Save Changes</button>
                 </div>
             </form>
-        @endunless
+        @endif
     </section>
 @endsection

@@ -31,7 +31,9 @@
             <div><span>Current Card</span><strong>{{ $member->activeRfidCard?->card_number ?? 'Not assigned' }}</strong></div>
         </div>
 
-        @if ($member->activeRfidCard)
+        @if ($member->status !== \App\Enums\RecordStatus::Active->value)
+            <div class="alert alert-warning">RFID cards can only be activated for active members. Reactivate this member before assigning a card.</div>
+        @elseif ($member->activeRfidCard)
             <div class="alert alert-warning">This member already has an active RFID card. Replace or deactivate the active card before assigning another card.</div>
         @else
             <form class="stacked-form" method="POST" action="{{ route('members.rfid-cards.store', $member) }}">

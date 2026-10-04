@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\AccessSyncAction;
+use App\Enums\RecordStatus;
 use App\Enums\RfidCardStatus;
 use App\Models\AccessSyncLog;
 use App\Models\Member;
@@ -18,6 +19,8 @@ class RfidCardManager
         $cardNumber = $this->normalizeCardNumber($cardNumber);
 
         return DB::transaction(function () use ($request, $member, $cardNumber, $remarks): RfidCard {
+            $member->refresh();
+            $this->ensureMemberIsActive($member);
             $this->ensureCardNumberAvailable($cardNumber);
             $this->ensureMemberHasNoActiveCard($member);
 
@@ -45,6 +48,7 @@ class RfidCardManager
 
         return DB::transaction(function () use ($request, $card, $newCardNumber, $remarks): RfidCard {
             $card->refresh();
+            $this->ensureMemberIsActive($card->member);
             $this->ensureCardIsActive($card);
             $this->ensureCardNumberAvailable($newCardNumber, $card->id);
 
@@ -177,6 +181,15 @@ class RfidCardManager
         if ($exists) {
             throw ValidationException::withMessages([
                 'member_id' => 'This member already has an active RFID card.',
+            ]);
+        }
+    }
+
+    private function ensureMemberIsActive(?Member $member): void
+    {
+        if (! $member || $member->status !== RecordStatus::Active->value) {
+            throw ValidationException::withMessages([
+                'card_number' => 'RFID cards can only be activated for active members.',
             ]);
         }
     }

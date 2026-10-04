@@ -27,9 +27,9 @@
         <div class="toolbar-actions">
             @if ($member)
                 <x-icon-action icon="back" label="Back to member profile" href="{{ route('members.show', $member) }}" />
-                @unless ($member->activeRfidCard)
+                @if (! $member->activeRfidCard && $member->status === \App\Enums\RecordStatus::Active->value)
                     <a class="btn btn-primary" href="{{ route('members.rfid-cards.create', $member) }}">Assign Card</a>
-                @endunless
+                @endif
             @endif
         </div>
     </div>

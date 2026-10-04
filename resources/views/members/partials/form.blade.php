@@ -290,9 +290,13 @@
                     <span class="field-label">RFID Card</span>
                     <label class="field">
                         <span>Card Number</span>
-                        <input type="text" name="rfid_card_number" value="{{ old('rfid_card_number', $member->rfid_card_number) }}" placeholder="Scan or enter card number" autocomplete="off" data-rfid-reader>
+                        <input type="text" name="rfid_card_number" value="{{ old('rfid_card_number', $member->rfid_card_number) }}" placeholder="Scan or enter card number" autocomplete="off" data-rfid-reader @disabled($member->exists && $member->status !== \App\Enums\RecordStatus::Active->value)>
                     </label>
-                    <p class="field-help">Scan the card with the RFID reader. The reader's Enter suffix will not submit this form.</p>
+                    @if ($member->exists && $member->status !== \App\Enums\RecordStatus::Active->value)
+                        <p class="field-help">Reactivate this member before assigning or updating an RFID card.</p>
+                    @else
+                        <p class="field-help">Scan the card with the RFID reader. The reader's Enter suffix will not submit this form.</p>
+                    @endif
                 </div>
             </div>
         </section>

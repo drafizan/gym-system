@@ -952,11 +952,11 @@ test('critical workflows write audit records across core modules', function () {
         'payment_methods' => ['cash', 'qr', 'debit_credit_card'],
     ])->assertRedirect();
 
+    app(RfidCardManager::class)->assign(rfidRequestFor($user), $member, 'AUDIT-RFID-001');
+
     $this->actingAs($user)
         ->patch(route('members.suspend', $member))
         ->assertRedirect();
-
-    app(RfidCardManager::class)->assign(rfidRequestFor($user), $member, 'AUDIT-RFID-001');
 
     app(ProductCatalogManager::class)->updateProduct(staffRequestFor($user), $product, [
         'selling_price' => 13,
@@ -1460,12 +1460,16 @@ test('members can be suspended and reactivated with audit logging', function () 
     $member = Member::factory()->create([
         'status' => 'active',
     ]);
+    $card = app(RfidCardManager::class)->assign(rfidRequestFor($user), $member, 'SUSPEND-RFID-001');
 
     $this->actingAs($user)
         ->patch(route('members.suspend', $member))
         ->assertRedirect();
 
     expect($member->fresh()->status)->toBe('suspended')
+        ->and($member->fresh()->rfid_card_number)->toBeNull()
+        ->and($card->fresh()->status)->toBe(RfidCardStatus::Inactive->value)
+        ->and(AccessSyncLog::query()->where('rfid_card_id', $card->id)->where('action', 'DISABLE_CARD')->exists())->toBeTrue()
         ->and(AuditLog::query()->where('module', 'members')->where('action', 'suspended')->exists())->toBeTrue();
 
     $this->actingAs($user)
@@ -1730,6 +1734,28 @@ test('rfid cards prevent duplicate active numbers and multiple active cards per 
 
     expect(fn () => $manager->assign(rfidRequestFor($user), $member, 'RFID-90003'))
         ->toThrow(ValidationException::class);
+});
+
+test('rfid cards can only be activated for active members', function () {
+    $user = User::factory()->create();
+    $inactiveMember = Member::factory()->create(['status' => RecordStatus::Suspended->value]);
+    $manager = app(RfidCardManager::class);
+
+    expect(fn () => $manager->assign(rfidRequestFor($user), $inactiveMember, 'RFID-INACTIVE-001'))
+        ->toThrow(ValidationException::class);
+
+    expect(RfidCard::query()->where('member_id', $inactiveMember->id)->exists())->toBeFalse()
+        ->and(AccessSyncLog::query()->where('member_id', $inactiveMember->id)->exists())->toBeFalse();
+
+    $activeMember = Member::factory()->create(['status' => RecordStatus::Active->value]);
+    $card = $manager->assign(rfidRequestFor($user), $activeMember, 'RFID-ACTIVE-001');
+    $activeMember->update(['status' => RecordStatus::Suspended->value]);
+
+    expect(fn () => $manager->replace(rfidRequestFor($user), $card, 'RFID-ACTIVE-002'))
+        ->toThrow(ValidationException::class);
+
+    expect($card->fresh()->card_number)->toBe('RFID-ACTIVE-001')
+        ->and(AccessSyncLog::query()->where('rfid_card_id', $card->id)->where('action', 'UPDATE_CARD')->exists())->toBeFalse();
 });
 
 test('rfid card numbers can be updated while keeping the card active', function () {

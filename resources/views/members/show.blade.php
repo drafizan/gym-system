@@ -176,7 +176,7 @@
                                 @method('PATCH')
                                 <x-icon-action icon="trash" label="Block RFID card" type="submit" variant="danger-soft" />
                             </form>
-                        @else
+                        @elseif ($member->status === \App\Enums\RecordStatus::Active->value)
                             <a class="btn btn-primary" href="{{ route('members.rfid-cards.create', $member) }}">Assign RFID Card</a>
                         @endif
                         <x-icon-action icon="eye" label="View RFID card history" href="{{ route('members.rfid-cards.history', $member) }}" />
