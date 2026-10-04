@@ -73,7 +73,6 @@
                     </label>
                     <div class="field form-span-2"><span>Total</span><strong data-pt-summary-total>RM {{ number_format((float) old('price'), 2) }}</strong></div>
                 </div>
-                <p>The PT package and session balance are assigned only after payment is completed in POS. No registration fee applies.</p>
             </section>
         </div>
     </form>
