@@ -494,8 +494,15 @@ document.querySelectorAll('[data-pt-package-assignment]').forEach((form) => {
         }
     };
 
+    const updateSummary = () => {
+        const amount = Number(priceInput?.value || 0);
+        form.querySelectorAll('[data-pt-summary-total]').forEach(element => { element.textContent = `RM ${amount.toFixed(2)}`; });
+    };
+    priceInput?.addEventListener('input', updateSummary);
+    priceInput?.addEventListener('change', updateSummary);
     applyPackagePrice();
-    packageSelect?.addEventListener('change', () => applyPackagePrice(true));
+    updateSummary();
+    packageSelect?.addEventListener('change', () => { applyPackagePrice(true); updateSummary(); });
 });
 
 document.querySelectorAll('[data-filterable-combobox]').forEach((combobox) => {
@@ -758,7 +765,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
             return;
         }
 
-        const disabled = !hasSelectedMember() || !!form.querySelector('[data-pos-registration-fee]');
+        const disabled = !hasSelectedMember() || !!form.querySelector('[data-pos-checkout-locked]');
         ptSaleInput.disabled = disabled;
         ptSaleInput.closest('.pos-type-option')?.classList.toggle('is-disabled', disabled);
 
@@ -808,7 +815,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
             const discountInput = line.querySelector('[data-pos-line-discount]');
             const option = selectedOption(select);
             const quantity = Math.max(1, Number(quantityInput?.value || 1));
-            const unitPrice = Number(option?.dataset.price || 0);
+            const unitPrice = Number(form.querySelector('[data-pos-pt-price]')?.value ?? option?.dataset.price ?? 0);
             const lineSubtotal = unitPrice * quantity;
             const discount = Math.min(Math.max(0, Number(discountInput?.value || 0)), lineSubtotal);
             const cappedDiscount = Math.min(discount, unitPrice);
@@ -890,7 +897,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         addProductButton?.toggleAttribute('disabled', !isProductSale);
 
         if (packageSelect) {
-            packageSelect.disabled = isProductSale || !!form.querySelector('[data-pos-registration-fee]');
+            packageSelect.disabled = isProductSale || !!form.querySelector('[data-pos-checkout-locked]');
         }
     };
 

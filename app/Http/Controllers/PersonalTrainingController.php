@@ -11,10 +11,12 @@ use App\Models\PtSession;
 use App\Models\PtTrainer;
 use App\Support\Audit;
 use App\Support\PtProductCatalog;
+use App\Support\SystemSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -112,6 +114,7 @@ class PersonalTrainingController extends Controller
         return view('pt.member-packages.create', [
             'members' => Member::query()->orderBy('full_name')->get(['id', 'member_no', 'full_name', 'phone']),
             'packages' => PtPackage::query()->where('status', RecordStatus::Active->value)->orderBy('name')->get(),
+            'paymentMethods' => app(SystemSettings::class)->paymentMethods(),
         ]);
     }
 
@@ -130,24 +133,26 @@ class PersonalTrainingController extends Controller
 
         $this->ensureMemberHasActiveMembership($member);
 
-        $purchasedAt = Carbon::parse($validated['purchased_at'])->startOfDay();
-        $memberPackage = PtMemberPackage::query()->create([
+        abort_unless($request->user()->hasPermission('sales.manage'), 403);
+        abort_unless($package->status === RecordStatus::Active->value, 422, 'Select an active PT package.');
+        $request->validate(['payment_method' => ['required', Rule::in(app(SystemSettings::class)->paymentMethods())]]);
+        $product = app(PtProductCatalog::class)->syncPackage($package);
+        $token = (string) Str::uuid();
+        $request->session()->put('registration_checkouts.'.$token, [
             'member_id' => $member->id,
+            'sale_type' => 'pt_session',
             'pt_package_id' => $package->id,
-            'total_sessions' => $package->sessions_count,
-            'used_sessions' => 0,
-            'price' => $validated['price'] ?? $package->price,
-            'purchased_at' => $purchasedAt->toDateString(),
-            'expires_at' => $package->validity_days ? $purchasedAt->copy()->addDays($package->validity_days - 1)->toDateString() : null,
-            'status' => RecordStatus::Active->value,
+            'pt_price' => $validated['price'] ?? $package->price,
+            'purchased_at' => $validated['purchased_at'],
             'notes' => $validated['notes'] ?? null,
-            'created_by' => $request->user()?->id,
-            'updated_by' => $request->user()?->id,
+            'product_items' => [['product_id' => $product->id, 'quantity' => 1]],
+            'payment_method' => $request->input('payment_method'),
+            'registration_fee' => 0,
+            'registration_checkout_token' => $token,
         ]);
 
-        Audit::record($request, 'personal_training', 'member_package_assigned', PtMemberPackage::class, $memberPackage->id, null, $memberPackage->toArray());
-
-        return redirect()->route('pt.sessions.index')->with('success', 'PT package assigned successfully.');
+        return redirect()->route('sales.pos', ['registration_checkout' => $token])
+            ->with('success', 'Review payment in POS. PT sessions are assigned only after payment is completed.');
     }
 
     public function schedule(Request $request): View

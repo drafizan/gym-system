@@ -16,8 +16,10 @@
         </div>
     </div>
 
-    <x-panel title="Member PT Package">
-        <form method="POST" action="{{ route('pt.member-packages.store') }}" data-pt-package-assignment>
+    <form method="POST" action="{{ route('pt.member-packages.store') }}" data-pt-package-assignment>
+        <div class="registration-layout">
+            <section class="registration-card">
+                <h2>Member PT Package</h2>
             @csrf
             <div class="form-grid two-columns">
                 <label class="form-row">
@@ -55,8 +57,24 @@
             </div>
             <div class="form-actions">
                 <a class="btn btn-light" href="{{ route('pt.sessions.index') }}">Cancel</a>
-                <button class="btn btn-primary" type="submit">Assign Package</button>
+                <button class="btn btn-primary" type="submit">Continue to POS</button>
             </div>
-        </form>
-    </x-panel>
+            </section>
+            <section class="registration-card">
+                <h2>POS Summary</h2>
+                <div class="form-grid compact">
+                    <div class="field form-span-2"><span>PT Package</span><strong data-pt-summary-total>RM {{ number_format((float) old('price'), 2) }}</strong></div>
+                    <label class="field form-span-2"><span>Payment Method</span>
+                        <select name="payment_method" required>
+                            @foreach ($paymentMethods as $method)
+                                <option value="{{ $method }}" @selected(old('payment_method', 'cash') === $method)>{{ \App\Enums\PaymentMethod::labelFor($method) }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <div class="field form-span-2"><span>Total</span><strong data-pt-summary-total>RM {{ number_format((float) old('price'), 2) }}</strong></div>
+                </div>
+                <p>The PT package and session balance are assigned only after payment is completed in POS. No registration fee applies.</p>
+            </section>
+        </div>
+    </form>
 @endsection

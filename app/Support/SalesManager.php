@@ -76,6 +76,30 @@ class SalesManager
                 $subtotal += $fee;
             }
 
+            if (! empty($data['pt_package_id'])) {
+                $package = PtPackage::query()->findOrFail($data['pt_package_id']);
+                if ($package->status !== RecordStatus::Active->value || ! $this->memberHasActiveMembership($member)) {
+                    throw ValidationException::withMessages(['member_id' => 'An active member and PT package are required.']);
+                }
+                $price = (float) $data['pt_price'];
+                $purchasedAt = Carbon::parse($data['purchased_at'])->startOfDay();
+                $sale->items()->create([
+                    'description' => $package->name, 'quantity' => 1, 'unit_price' => $price, 'total' => $price,
+                    'metadata' => ['registration_checkout_token' => $data['registration_checkout_token'], 'pt_package_id' => $package->id],
+                ]);
+                $balance = PtMemberPackage::query()->create([
+                    'member_id' => $member->id, 'pt_package_id' => $package->id, 'sale_id' => $sale->id,
+                    'total_sessions' => $package->sessions_count, 'used_sessions' => 0, 'price' => round($price - $discount, 2),
+                    'purchased_at' => $purchasedAt->toDateString(),
+                    'expires_at' => $package->validity_days ? $purchasedAt->copy()->addDays($package->validity_days - 1)->toDateString() : null,
+                    'status' => RecordStatus::Active->value, 'notes' => $data['notes'] ?? null,
+                    'created_by' => $request->user()->id, 'updated_by' => $request->user()->id,
+                ]);
+                Audit::record($request, 'personal_training', 'member_package_created_from_pos', PtMemberPackage::class, $balance->id, null, $balance->toArray());
+                $subtotal += $price;
+                $productItems = [];
+            }
+
             foreach ($productItems as $item) {
                 $line = $this->createProductSaleItem($request, $sale, $item, $member, $saleType);
                 $subtotal += $line['subtotal'];

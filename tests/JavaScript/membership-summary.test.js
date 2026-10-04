@@ -50,3 +50,26 @@ for (const fee of [0, 60]) {
         assert.equal(total.textContent, `RM ${(135 + fee).toFixed(2)}`);
     });
 }
+
+test('PT assignment summary updates when package or price changes', () => {
+    const ptStart = source.indexOf("document.querySelectorAll('[data-pt-package-assignment]')");
+    const ptEnd = source.indexOf("document.querySelectorAll('[data-filterable-combobox]')", ptStart);
+    const price = control();
+    const totals = [{ textContent: '' }, { textContent: '' }];
+    const select = Object.assign(control(), {
+        options: [{ dataset: { price: '500' } }, { dataset: { price: '800' } }], selectedIndex: 0,
+    });
+    const form = {
+        querySelector: selector => selector === '[data-pt-package-select]' ? select : price,
+        querySelectorAll: () => totals,
+    };
+    vm.runInNewContext(source.slice(ptStart, ptEnd), { document: { querySelectorAll: () => [form] } });
+    assert.equal(totals[0].textContent, 'RM 500.00');
+    select.selectedIndex = 1;
+    select.dispatch('change');
+    assert.equal(totals[1].textContent, 'RM 800.00');
+    price.value = '450';
+    price.dispatch('input');
+    assert.equal(totals[0].textContent, 'RM 450.00');
+    assert.equal(totals[1].textContent, 'RM 450.00');
+});

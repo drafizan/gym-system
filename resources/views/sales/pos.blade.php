@@ -29,7 +29,7 @@
             ? $selectedMember->full_name.' · '.$selectedMember->member_no
             : 'Walk-in / no member';
         $selectedSaleType = old('sale_type', $checkout['sale_type'] ?? \App\Enums\SaleType::ProductSale->value);
-        $oldProductItems = collect(old('product_items', []))
+        $oldProductItems = collect(old('product_items', $checkout['product_items'] ?? []))
             ->filter(fn ($item) => is_array($item))
             ->values();
         if ($oldProductItems->isEmpty()) {
@@ -45,11 +45,17 @@
         @csrf
         @if ($checkout)
             <input type="hidden" name="registration_checkout_token" value="{{ $checkout['registration_checkout_token'] }}">
+            @if (! empty($checkout['pt_package_id']))
+                <input type="hidden" value="{{ $checkout['pt_price'] }}" data-pos-pt-price>
+                <p class="form-span-2">PT package checkout · Purchased {{ $checkout['purchased_at'] }} · No registration fee.</p>
+            @else
             <input type="hidden" name="start_date" value="{{ $checkout['start_date'] }}">
             <input type="hidden" name="end_date" value="{{ $checkout['end_date'] }}">
             <input type="hidden" name="membership_amount" value="{{ $checkout['membership_amount'] }}" data-pos-membership-amount>
             <input type="hidden" value="{{ $checkout['registration_fee'] }}" data-pos-registration-fee>
             <p class="form-span-2">{{ $checkout['registration_fee'] > 0 ? 'New member checkout' : 'Membership checkout' }} · Starts {{ $checkout['start_date'] }}@if ($checkout['registration_fee'] > 0) · Registration Fee RM {{ number_format($checkout['registration_fee'], 2) }} included.@else · No registration fee.@endif</p>
+            @endif
+            <input type="hidden" value="1" data-pos-checkout-locked>
         @endif
 
         <section class="pos-card pos-entry-panel">
@@ -145,7 +151,7 @@
                         </select>
                     </label>
 
-                    <div class="pos-product-lines" data-pos-product-row>
+                    <div class="pos-product-lines" @if ($checkout) inert @endif data-pos-product-row>
                         <div class="pos-product-line-header">
                             <span>Product</span>
                             <span>Quantity</span>
@@ -292,7 +298,7 @@
 
                 <label class="form-row">
                     <span>Remarks</span>
-                    <textarea name="remarks" rows="4" placeholder="Optional">{{ old('remarks') }}</textarea>
+                    <textarea name="remarks" rows="4" placeholder="Optional">{{ old('remarks', $checkout['notes'] ?? null) }}</textarea>
                 </label>
             </div>
 

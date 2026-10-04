@@ -2599,7 +2599,7 @@ test('pos page syncs active personal training packages into saleable products', 
 
 test('personal training management screens create packages trainers and sessions', function () {
     $user = User::factory()->create([
-        'role_id' => roleWithPermissions(['pt.manage'])->id,
+        'role_id' => roleWithPermissions(['pt.manage', 'sales.manage'])->id,
     ]);
     $member = Member::factory()->create();
     $membershipPackage = MembershipPackage::factory()->create();
@@ -2634,11 +2634,14 @@ test('personal training management screens create packages trainers and sessions
     $trainer = PtTrainer::query()->where('name', 'Coach Adam')->firstOrFail();
     $package = PtPackage::query()->where('name', 'PT Session 3 Pack')->firstOrFail();
 
-    $this->actingAs($user)->post(route('pt.member-packages.store'), [
+    $checkout = $this->actingAs($user)->post(route('pt.member-packages.store'), [
         'member_id' => $member->id,
         'pt_package_id' => $package->id,
         'purchased_at' => now()->toDateString(),
-    ])->assertRedirect(route('pt.sessions.index'));
+        'payment_method' => 'cash',
+    ])->assertRedirect();
+    parse_str(parse_url($checkout->headers->get('Location'), PHP_URL_QUERY), $query);
+    $this->post(route('sales.store'), ['registration_checkout_token' => $query['registration_checkout'], 'payment_method' => 'cash'])->assertRedirect();
 
     $memberPackage = PtMemberPackage::query()->where('member_id', $member->id)->firstOrFail();
 
@@ -3756,4 +3759,33 @@ test('cashier personal training menu only shows operational links', function () 
         ->assertSee('href="'.route('pt.trainers.index').'"', false)
         ->assertSee('href="'.route('pt.packages.index').'"', false)
         ->assertSee('href="'.route('pt.reports.commission').'"', false);
+});
+
+test('PT assignment prepares POS and creates sessions only after payment', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['pt.manage', 'sales.manage'])->id]);
+    $member = Member::factory()->create(['status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $member->id, 'status' => 'active', 'start_date' => now()->subDays(1), 'end_date' => now()->addDays(30)]);
+    $package = PtPackage::query()->create(['name' => 'PT Checkout 5', 'sessions_count' => 5, 'price' => 500, 'commission_per_session' => 30, 'validity_days' => 90, 'status' => 'active']);
+    $this->actingAs($staff)->get(route('pt.member-packages.create'))->assertOk()->assertSee('POS Summary')->assertSee('Continue to POS');
+    $response = $this->post(route('pt.member-packages.store'), [
+        'member_id' => $member->id, 'pt_package_id' => $package->id, 'purchased_at' => '2026-10-04',
+        'price' => 450, 'notes' => 'Five session pack', 'payment_method' => 'qr',
+    ])->assertRedirect();
+    parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
+    $token = $query['registration_checkout'];
+    $draft = session('registration_checkouts.'.$token);
+    expect(PtMemberPackage::query()->count())->toBe(0)->and(Sale::query()->count())->toBe(0);
+    $this->get($response->headers->get('Location'))->assertOk()->assertSee('PT package checkout')->assertSee('value="450"', false);
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token])->assertSessionHasErrors('payment_method');
+    expect(PtMemberPackage::query()->count())->toBe(0);
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'qr'])->assertRedirect();
+    $balance = PtMemberPackage::query()->firstOrFail();
+    $sale = Sale::query()->firstOrFail();
+    expect($balance->pt_package_id)->toBe($package->id)->and($balance->total_sessions)->toBe(5)
+        ->and($balance->notes)->toBe('Five session pack')->and($balance->purchased_at->toDateString())->toBe('2026-10-04')
+        ->and((float) $sale->total)->toBe(450.0)->and($sale->items()->count())->toBe(1);
+    $this->withSession(['registration_checkouts' => [$token => $draft]])
+        ->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'qr'])
+        ->assertRedirect(route('sales.receipt', $sale));
+    expect(PtMemberPackage::query()->count())->toBe(1)->and(Sale::query()->count())->toBe(1);
 });

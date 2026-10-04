@@ -108,7 +108,7 @@ class SaleController extends Controller
         $sale = $sales->complete($request, [
             ...$validated,
             'product_items' => $productItems,
-            ...($draft ? ['registration_fee' => $draft['registration_fee'], 'registration_checkout_token' => $token] : []),
+            ...($draft ? collect($draft)->except(['payment_method', 'sale_id', 'product_items'])->all() : []),
         ]);
 
         if ($draft) {
