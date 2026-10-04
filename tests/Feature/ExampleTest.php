@@ -3581,7 +3581,10 @@ test('users and roles submenu destinations show configured access and password r
         ->assertSee(route('users.permissions'), false)
         ->assertSee(route('users.password-resets'), false);
 
-    $this->get(route('users.roles'))->assertOk()->assertSee($role->label)->assertSee($role->permissions()->first()->label);
+    $this->get(route('users.index'))->assertOk()
+        ->assertSeeInOrder(['System Users', 'Configured Roles'])
+        ->assertSee($role->label)->assertSee($role->permissions()->first()->label);
+    $this->get(route('users.roles'))->assertRedirect(route('users.index').'#configured-roles');
     $this->get(route('users.permissions'))->assertOk()->assertSee('users.manage')->assertSee($role->label);
     $this->get(route('users.password-resets'))->assertOk()
         ->assertSee($admin->username)

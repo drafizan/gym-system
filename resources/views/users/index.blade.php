@@ -71,4 +71,27 @@
             </table>
         </div>
     </section>
+    <section class="table-shell" id="configured-roles" style="margin-top: 24px;">
+        <div class="table-shell-header">
+            <h2>Configured Roles</h2>
+        </div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>Permissions</th><th>Users</th></tr>
+                </thead>
+                <tbody>
+                    @forelse ($roles as $role)
+                        <tr>
+                            <td>{{ $role->label }}<br><small>{{ $role->name }}</small></td>
+                            <td style="white-space: normal; min-width: 260px;">{{ $role->permissions->pluck('label')->join(', ') ?: 'None' }}</td>
+                            <td>{{ $role->users_count }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="3">No roles configured.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
 @endsection

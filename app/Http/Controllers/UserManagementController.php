@@ -17,15 +17,13 @@ class UserManagementController extends Controller
     {
         return view('users.index', [
             'users' => User::query()->with('role')->latest()->get(),
+            'roles' => Role::query()->with('permissions')->withCount('users')->orderBy('label')->get(),
         ]);
     }
 
-    public function roles(): View
+    public function roles(): RedirectResponse
     {
-        return view('users.access', [
-            'title' => 'Roles',
-            'records' => Role::query()->with('permissions')->withCount('users')->orderBy('label')->get(),
-        ]);
+        return redirect()->to(route('users.index').'#configured-roles');
     }
 
     public function permissions(): View
