@@ -230,9 +230,15 @@ To register a member:
 2. Click `Register Member`.
 3. Fill in the member details.
 4. Add a photo by upload or camera capture, when available.
-5. Click `Register Member`.
+5. Select the membership package and review the start date, end date, and amount.
+6. Review the POS Summary below Membership Information and choose the payment method. New registrations include the one-time Registration Fee (the configured package price, RM60 if not configured).
+7. Click `Save & Continue to POS`. This requires member and sales permissions.
+8. Review the prefilled member, package, dates, amount, registration fee, and payment method. Add a payment reference or discount if needed.
+9. Click `Complete Sale` to create the paid membership, sale, payment, and receipt and queue membership door-access synchronization.
 
-The system automatically creates the member number after saving.
+The system creates the member number when saving registration. The new membership is created when the POS payment is completed. The fee is a sale item, not an additional membership. Repeating the same checkout does not create another sale. Checkout details remain available in the current staff session; complete checkout before the session expires.
+
+Membership Renewal in POS does not add a Registration Fee.
 
 CSV import requires at least:
 

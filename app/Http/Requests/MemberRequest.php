@@ -12,7 +12,8 @@ class MemberRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasPermission('members.manage') ?? false;
+        return ($this->user()?->hasPermission('members.manage') ?? false)
+            && (! $this->boolean('registration_checkout') || $this->user()->hasPermission('sales.manage'));
     }
 
     /**
@@ -38,7 +39,8 @@ class MemberRequest extends FormRequest
                 Rule::exists('members', 'id')->where('status', RecordStatus::Active->value),
                 Rule::notIn(array_filter([$this->member()?->id])),
             ],
-            'membership_package_id' => ['nullable', 'exists:membership_packages,id'],
+            'registration_checkout' => ['sometimes', 'boolean'],
+            'membership_package_id' => ['required_if:registration_checkout,1', 'nullable', 'exists:membership_packages,id'],
             'membership_start_date' => ['nullable', 'date'],
             'membership_end_date' => ['nullable', 'date', 'after_or_equal:membership_start_date'],
             'membership_amount' => ['nullable', 'numeric', 'min:0'],

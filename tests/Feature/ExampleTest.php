@@ -3603,3 +3603,73 @@ test('users and roles submenu destinations enforce user management permission', 
         $this->get(route($route))->assertForbidden();
     }
 });
+
+test('registration checkout carries membership details to POS and charges the fee exactly once', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['members.manage', 'sales.manage'])->id]);
+    $package = MembershipPackage::factory()->create(['name' => 'Monthly Checkout', 'price' => 150, 'duration_days' => 30]);
+    MembershipPackage::factory()->create(['name' => 'Registration Fee', 'price' => 65, 'access_allowed' => false]);
+
+    $this->actingAs($staff)->get(route('members.create'))->assertOk()
+        ->assertSee('POS Summary')->assertSee('Save &amp; Continue to POS', false)->assertSee('RM 65.00');
+    $response = $this->post(route('members.store'), [
+        'registration_checkout' => 1,
+        'full_name' => 'Checkout Member', 'phone' => '+60123456789',
+        'membership_package_id' => $package->id,
+        'membership_start_date' => '2026-10-05', 'membership_end_date' => '2026-11-10',
+        'membership_amount' => 130, 'membership_payment_method' => 'qr',
+    ])->assertRedirect();
+    $member = Member::query()->where('full_name', 'Checkout Member')->firstOrFail();
+    $url = $response->headers->get('Location');
+    parse_str(parse_url($url, PHP_URL_QUERY), $query);
+    $token = $query['registration_checkout'];
+    $draft = session('registration_checkouts.'.$token);
+    expect($member->memberships()->count())->toBe(0)->and(Sale::query()->count())->toBe(0);
+    $this->get($url)->assertOk()->assertSee('Checkout Member')->assertSee('RM 65.00')
+        ->assertSee('value="130"', false)->assertSee('value="qr" selected', false);
+
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token])->assertSessionHasErrors('payment_method');
+    expect(Sale::query()->count())->toBe(0);
+    $this->post(route('sales.store'), [
+        'registration_checkout_token' => $token, 'payment_method' => 'qr', 'payment_reference' => 'QR-001',
+        'membership_amount' => 1, 'sale_type' => 'membership_renewal', 'registration_fee' => 0,
+    ])->assertRedirect();
+    $sale = Sale::query()->firstOrFail();
+    expect((float) $sale->total)->toBe(195.0)
+        ->and($sale->items()->count())->toBe(2)
+        ->and($sale->payments()->first()->reference_no)->toBe('QR-001')
+        ->and($member->memberships()->count())->toBe(1)
+        ->and($member->latestMembership()->first()->payment_status)->toBe('paid')
+        ->and($member->latestMembership()->first()->end_date->toDateString())->toBe('2026-11-10');
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'qr'])
+        ->assertRedirect(route('sales.receipt', $sale));
+    // A retry with the original draft still resolves to the same database sale.
+    $this->withSession(['registration_checkouts' => [$token => $draft]])
+        ->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'qr'])
+        ->assertRedirect(route('sales.receipt', $sale));
+    expect(Sale::query()->count())->toBe(1)->and($member->memberships()->count())->toBe(1);
+
+    $this->post(route('sales.store'), [
+        'sale_type' => 'membership_renewal', 'member_id' => $member->id,
+        'membership_package_id' => $package->id, 'payment_method' => 'cash', 'registration_fee' => 65,
+    ])->assertRedirect();
+    $renewal = Sale::query()->latest('id')->first();
+    expect((float) $renewal->total)->toBe(150.0)
+        ->and($renewal->items()->where('description', 'Registration Fee')->count())->toBe(0);
+});
+
+test('registration checkout rejects missing packages expired drafts and staff without POS permission', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['members.manage', 'sales.manage'])->id]);
+    $this->actingAs($staff)->post(route('members.store'), [
+        'registration_checkout' => 1, 'full_name' => 'Missing Package', 'phone' => '+60123456789',
+    ])->assertSessionHasErrors('membership_package_id');
+    expect(Member::query()->count())->toBe(0);
+    $token = (string) str()->uuid();
+    $this->get(route('sales.pos', ['registration_checkout' => $token]))->assertNotFound();
+    $this->post(route('sales.store'), ['registration_checkout_token' => $token])->assertNotFound();
+    $limitedRole = Role::query()->create(['name' => 'registration-only', 'label' => 'Registration Only']);
+    $limitedRole->permissions()->attach(Permission::query()->where('name', 'members.manage')->firstOrFail());
+    $limited = User::factory()->create(['role_id' => $limitedRole->id]);
+    $this->actingAs($limited)->post(route('members.store'), [
+        'registration_checkout' => 1, 'full_name' => 'No POS Access', 'phone' => '+60123456789',
+    ])->assertForbidden();
+});

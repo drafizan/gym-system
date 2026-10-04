@@ -18,10 +18,11 @@
 
     <form class="member-registration-form" method="POST" action="{{ route('members.store') }}" enctype="multipart/form-data">
         @csrf
+        <input type="hidden" name="registration_checkout" value="1">
         @include('members.partials.form', [
             'cancelUrl' => route('members.index'),
-            'submitLabel' => 'Save Member',
-            'showSaveAnother' => true,
+            'submitLabel' => 'Save & Continue to POS',
+            'showSaveAnother' => false,
         ])
     </form>
 @endsection

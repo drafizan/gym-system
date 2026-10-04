@@ -23,12 +23,12 @@
     </div>
 
     @php
-        $selectedMemberId = old('member_id');
+        $selectedMemberId = old('member_id', $checkout['member_id'] ?? null);
         $selectedMember = $members->firstWhere('id', (int) $selectedMemberId);
         $selectedMemberLabel = $selectedMember
             ? $selectedMember->full_name.' · '.$selectedMember->member_no
             : 'Walk-in / no member';
-        $selectedSaleType = old('sale_type', \App\Enums\SaleType::ProductSale->value);
+        $selectedSaleType = old('sale_type', $checkout['sale_type'] ?? \App\Enums\SaleType::ProductSale->value);
         $oldProductItems = collect(old('product_items', []))
             ->filter(fn ($item) => is_array($item))
             ->values();
@@ -43,6 +43,14 @@
 
     <form class="pos-shell" method="POST" action="{{ route('sales.store') }}" data-pos-form>
         @csrf
+        @if ($checkout)
+            <input type="hidden" name="registration_checkout_token" value="{{ $checkout['registration_checkout_token'] }}">
+            <input type="hidden" name="start_date" value="{{ $checkout['start_date'] }}">
+            <input type="hidden" name="end_date" value="{{ $checkout['end_date'] }}">
+            <input type="hidden" name="membership_amount" value="{{ $checkout['membership_amount'] }}" data-pos-membership-amount>
+            <input type="hidden" value="{{ $checkout['registration_fee'] }}" data-pos-registration-fee>
+            <p class="form-span-2">New member checkout · Starts {{ $checkout['start_date'] }} · Registration Fee RM {{ number_format($checkout['registration_fee'], 2) }} included.</p>
+        @endif
 
         <section class="pos-card pos-entry-panel">
             <div class="pos-card-header">
@@ -57,14 +65,14 @@
                 <span class="pos-section-title">Customer</span>
                 <label class="form-row">
                     <span>Member</span>
-                    <div class="filterable-combobox" data-filterable-combobox>
-                        <select name="member_id" data-combobox-native tabindex="-1" aria-hidden="true">
+                    <div class="filterable-combobox" @if ($checkout) inert @endif data-filterable-combobox>
+                        <select name="member_id" data-combobox-native @disabled(! empty($checkout)) tabindex="-1" aria-hidden="true">
                             <option value="" data-filter="walk-in no member">Walk-in / no member</option>
                             @foreach ($members as $member)
                                 <option
                                     value="{{ $member->id }}"
                                     data-filter="{{ str($member->full_name.' '.$member->member_no.' '.$member->phone)->lower() }}"
-                                    @selected((string) old('member_id') === (string) $member->id)
+                                    @selected((string) old('member_id', $checkout['member_id'] ?? null) === (string) $member->id)
                                 >
                                     {{ $member->full_name }} · {{ $member->member_no }}
                                 </option>
@@ -110,7 +118,7 @@
                 <div class="pos-type-grid" role="radiogroup" aria-label="Sale type">
                     @foreach ($saleTypes as $type)
                         <label class="pos-type-option">
-                            <input type="radio" name="sale_type" value="{{ $type->value }}" @checked($selectedSaleType === $type->value) data-pos-sale-type>
+                            <input type="radio" name="sale_type" value="{{ $type->value }}" @checked($selectedSaleType === $type->value) data-pos-sale-type @disabled(! empty($checkout))>
                             <span>{{ $type->label() }}</span>
                         </label>
                     @endforeach
@@ -122,14 +130,14 @@
                 <div class="pos-item-grid" data-pos-product-list>
                     <label class="form-row" data-pos-package-row>
                         <span>Membership Package</span>
-                        <select name="membership_package_id" data-pos-package-select>
+                        <select name="membership_package_id" data-pos-package-select @disabled(! empty($checkout))>
                             <option value="" data-price="0" data-label="No membership package">No membership package</option>
                             @foreach ($packages as $package)
                                 <option
                                     value="{{ $package->id }}"
                                     data-price="{{ (float) $package->price }}"
                                     data-label="{{ $package->name }}"
-                                    @selected((string) old('membership_package_id') === (string) $package->id)
+                                    @selected((string) old('membership_package_id', $checkout['membership_package_id'] ?? null) === (string) $package->id)
                                 >
                                     {{ $package->name }} · RM {{ number_format((float) $package->price, 2) }}
                                 </option>
@@ -272,7 +280,7 @@
                     <span>Payment Method</span>
                     <select name="payment_method" required>
                         @foreach ($paymentMethods as $method)
-                            <option value="{{ $method }}" @selected(old('payment_method', 'cash') === $method)>{{ \App\Enums\PaymentMethod::labelFor($method) }}</option>
+                            <option value="{{ $method }}" @selected(old('payment_method', $checkout['payment_method'] ?? 'cash') === $method)>{{ \App\Enums\PaymentMethod::labelFor($method) }}</option>
                         @endforeach
                     </select>
                 </label>
@@ -289,7 +297,7 @@
             </div>
 
             <div class="pos-actions">
-                <button class="btn btn-light" type="reset">Clear</button>
+                <button class="btn btn-light" type="reset" @disabled(! empty($checkout))>Clear</button>
                 <button class="btn btn-primary" type="submit">Complete Sale</button>
             </div>
         </aside>

@@ -13,6 +13,7 @@ use App\Models\MemberMembership;
 use App\Models\MembershipPackage;
 use App\Support\Audit;
 use App\Support\MembershipPeriod;
+use App\Support\RegistrationCheckout;
 use App\Support\RfidCardManager;
 use App\Support\SalesManager;
 use App\Support\SystemSettings;
@@ -23,6 +24,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class MemberController extends Controller
@@ -279,6 +281,7 @@ class MemberController extends Controller
     public function store(MemberRequest $request): RedirectResponse
     {
         $validated = $request->safe()->except([
+            'registration_checkout',
             'photo',
             'captured_photo',
             'membership_package_id',
@@ -297,8 +300,29 @@ class MemberController extends Controller
         $member = Member::query()->create($validated);
 
         Audit::record($request, 'members', 'created', Member::class, $member->id, null, $member->toArray());
-        $this->createInitialMembership($request, $member);
+        if (! $request->boolean('registration_checkout')) {
+            $this->createInitialMembership($request, $member);
+        }
         app(RfidCardManager::class)->syncMemberCardInput($request, $member, $rfidCardNumber);
+
+        if ($request->boolean('registration_checkout')) {
+            $token = (string) Str::uuid();
+            $package = MembershipPackage::query()->findOrFail($request->integer('membership_package_id'));
+            $request->session()->put('registration_checkouts.'.$token, [
+                'member_id' => $member->id,
+                'sale_type' => SaleType::MembershipSale->value,
+                'membership_package_id' => $package->id,
+                'start_date' => $request->input('membership_start_date') ?: now()->toDateString(),
+                'end_date' => $request->input('membership_end_date'),
+                'membership_amount' => $request->input('membership_amount') ?? $package->price,
+                'payment_method' => $request->input('membership_payment_method') ?: 'cash',
+                'registration_fee' => RegistrationCheckout::fee(),
+                'registration_checkout_token' => $token,
+            ]);
+
+            return redirect()->route('sales.pos', ['registration_checkout' => $token])
+                ->with('success', 'Member saved. Complete payment in POS to activate the membership.');
+        }
 
         if ($request->boolean('save_and_add')) {
             return redirect()->route('members.create')->with('success', 'Member registered successfully. You can add another member.');
@@ -384,8 +408,10 @@ class MemberController extends Controller
     private function memberFormOptions(bool $allowMembershipSetup, ?Member $member = null): array
     {
         return [
+            'registrationFee' => RegistrationCheckout::fee(),
             'membershipPackages' => MembershipPackage::query()
                 ->where('status', 'active')
+                ->where('name', '!=', 'Registration Fee')
                 ->orderBy('name')
                 ->get(),
             'paymentMethods' => app(SystemSettings::class)->paymentMethods(),

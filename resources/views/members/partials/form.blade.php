@@ -169,7 +169,7 @@
             <div class="form-grid compact">
                 <label class="field form-span-2">
                     <span>Membership Type</span>
-                    <select name="membership_package_id" data-membership-package-select @disabled(! $allowMembershipSetup)>
+                    <select name="membership_package_id" @required(! $member->exists) data-membership-package-select @disabled(! $allowMembershipSetup)>
                         <option value="">Select membership type</option>
                         @foreach ($membershipPackages as $package)
                             <option
@@ -202,6 +202,7 @@
                     <input type="number" name="membership_amount" min="0" step="0.01" value="{{ $membershipAmount }}" placeholder="Enter amount" data-membership-amount @disabled(! $allowMembershipSetup)>
                 </label>
 
+                @if ($member->exists)
                 <label class="field">
                     <span>Payment Method</span>
                     <select name="membership_payment_method" @disabled(! $allowMembershipSetup)>
@@ -220,8 +221,29 @@
                         @endforeach
                     </select>
                 </label>
+                @endif
             </div>
         </section>
+
+        @if (! $member->exists)
+            <section class="registration-card" data-registration-pos data-registration-fee="{{ $registrationFee }}">
+                <h2>POS Summary</h2>
+                <div class="form-grid compact">
+                    <div class="field"><span>Membership</span><strong data-registration-membership-total>RM {{ number_format((float) $membershipAmount, 2) }}</strong></div>
+                    <div class="field"><span>Registration Fee (one time)</span><strong>RM {{ number_format($registrationFee, 2) }}</strong></div>
+                    <label class="field form-span-2">
+                        <span>Payment Method</span>
+                        <select name="membership_payment_method">
+                            @foreach ($paymentMethods as $method)
+                                <option value="{{ $method }}" @selected($membershipPaymentMethod === $method)>{{ \App\Enums\PaymentMethod::labelFor($method) }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <div class="field form-span-2"><span>Total</span><strong data-registration-total>RM {{ number_format((float) $membershipAmount + $registrationFee, 2) }}</strong></div>
+                </div>
+                <p>Save to review and complete this payment in POS. Renewals do not include the registration fee.</p>
+            </section>
+        @endif
 
         <section class="registration-card">
             <h2>Photo & RFID Card</h2>

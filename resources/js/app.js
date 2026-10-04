@@ -407,6 +407,16 @@ document.querySelectorAll('[data-folder-picker-open]').forEach((button) => {
 document.querySelectorAll('[data-membership-package-select]').forEach((select) => {
     const form = select.closest('form');
     const amountInput = form?.querySelector('[data-membership-amount]');
+    const summary = form?.querySelector('[data-registration-pos]');
+    const updateRegistrationSummary = () => {
+        if (!summary) return;
+        const amount = Number(amountInput?.value || 0);
+        summary.querySelector('[data-registration-membership-total]').textContent = `RM ${amount.toFixed(2)}`;
+        summary.querySelector('[data-registration-total]').textContent = `RM ${(amount + Number(summary.dataset.registrationFee)).toFixed(2)}`;
+    };
+    amountInput?.addEventListener('input', updateRegistrationSummary);
+    select.addEventListener('change', () => queueMicrotask(updateRegistrationSummary));
+    queueMicrotask(updateRegistrationSummary);
     const startDateInput = form?.querySelector('[data-membership-start-date]');
     const endDateInput = form?.querySelector('[data-membership-end-date]');
 
@@ -741,7 +751,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
             return;
         }
 
-        const disabled = !hasSelectedMember();
+        const disabled = !hasSelectedMember() || !!form.querySelector('[data-pos-registration-fee]');
         ptSaleInput.disabled = disabled;
         ptSaleInput.closest('.pos-type-option')?.classList.toggle('is-disabled', disabled);
 
@@ -831,7 +841,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         }
 
         const option = selectedOption(packageSelect);
-        const unitPrice = Number(option?.dataset.price || 0);
+        const unitPrice = Number(form.querySelector('[data-pos-membership-amount]')?.value ?? option?.dataset.price ?? 0);
         const label = option?.dataset.label || 'No membership package';
 
         return {
@@ -873,7 +883,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         addProductButton?.toggleAttribute('disabled', !isProductSale);
 
         if (packageSelect) {
-            packageSelect.disabled = isProductSale;
+            packageSelect.disabled = isProductSale || !!form.querySelector('[data-pos-registration-fee]');
         }
     };
 
@@ -882,6 +892,11 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         syncAvailableProducts();
         syncItemMode();
         const selected = selectedItems();
+        const fee = form.querySelector('[data-pos-registration-fee]');
+        if (fee) {
+            const amount = Number(fee.value);
+            selected.items.push({ label: 'Registration Fee', quantity: 1, unitPrice: amount, subtotal: amount, discount: 0 });
+        }
         const subtotal = selected.items.reduce((sum, item) => sum + item.subtotal, 0);
         const lineDiscount = selected.isProductSale
             ? selected.items.reduce((sum, item) => sum + item.discount, 0)

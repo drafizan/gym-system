@@ -32,7 +32,16 @@ class SalesManager
     {
         return DB::transaction(function () use ($request, $data): Sale {
             $saleType = SaleType::from($data['sale_type'] ?? SaleType::ProductSale->value);
-            $member = isset($data['member_id']) ? Member::query()->findOrFail($data['member_id']) : null;
+            $member = isset($data['member_id']) ? Member::query()->lockForUpdate()->findOrFail($data['member_id']) : null;
+            if (! empty($data['registration_checkout_token'])) {
+                $existing = Sale::query()->where('member_id', $member?->id)
+                    ->whereHas('items', fn ($query) => $query->where('metadata->registration_checkout_token', $data['registration_checkout_token']))
+                    ->first();
+                if ($existing) {
+                    return $existing;
+                }
+            }
+
             $productItems = $data['product_items'] ?? [];
             $discount = (float) ($data['discount'] ?? 0);
 
@@ -53,6 +62,18 @@ class SalesManager
 
             if (in_array($saleType, [SaleType::MembershipSale, SaleType::MembershipRenewal, SaleType::WalkInSale], true)) {
                 $subtotal += $this->createMembershipSaleItem($request, $sale, $saleType, $member, $data);
+            }
+
+            if ($saleType === SaleType::MembershipSale && isset($data['registration_fee'])) {
+                $fee = (float) $data['registration_fee'];
+                $sale->items()->create([
+                    'description' => 'Registration Fee',
+                    'quantity' => 1,
+                    'unit_price' => $fee,
+                    'total' => $fee,
+                    'metadata' => ['registration_checkout_token' => $data['registration_checkout_token']],
+                ]);
+                $subtotal += $fee;
             }
 
             foreach ($productItems as $item) {
@@ -174,7 +195,9 @@ class SalesManager
 
         $package = MembershipPackage::query()->findOrFail($data['membership_package_id'] ?? null);
         $startDate = Carbon::parse($data['start_date'] ?? now())->startOfDay();
-        $endDate = MembershipPeriod::endDateFromStart($startDate, $package->duration_days);
+        $endDate = ! empty($data['end_date'])
+            ? Carbon::parse($data['end_date'])->startOfDay()
+            : MembershipPeriod::endDateFromStart($startDate, $package->duration_days);
         $auditAction = 'assigned';
 
         if ($saleType === SaleType::MembershipRenewal) {
