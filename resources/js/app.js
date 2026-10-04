@@ -415,8 +415,7 @@ document.querySelectorAll('[data-membership-package-select]').forEach((select) =
         summary.querySelector('[data-registration-total]').textContent = `RM ${(amount + Number(summary.dataset.registrationFee)).toFixed(2)}`;
     };
     amountInput?.addEventListener('input', updateRegistrationSummary);
-    select.addEventListener('change', () => queueMicrotask(updateRegistrationSummary));
-    queueMicrotask(updateRegistrationSummary);
+    amountInput?.addEventListener('change', updateRegistrationSummary);
     const startDateInput = form?.querySelector('[data-membership-start-date]');
     const endDateInput = form?.querySelector('[data-membership-end-date]');
 
@@ -466,10 +465,12 @@ document.querySelectorAll('[data-membership-package-select]').forEach((select) =
 
     applySelectedPrice();
     applySelectedEndDate();
+    updateRegistrationSummary();
 
     select.addEventListener('change', () => {
         applySelectedPrice(true);
         applySelectedEndDate(true);
+        updateRegistrationSummary();
     });
 
     startDateInput?.addEventListener('change', () => {
