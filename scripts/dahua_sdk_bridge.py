@@ -1525,10 +1525,26 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
 
-if __name__ == "__main__":
-    SDK = DahuaSdk()
+def main() -> None:
+    global SDK
     host = os.environ.get("DAHUA_BRIDGE_HOST", "127.0.0.1")
     port = int(os.environ.get("DAHUA_BRIDGE_PORT", "8787"))
-    print(f"MACS Dahua SDK bridge listening on http://{host}:{port}")
-    print(f"Using SDK: {SDK.sdk_path}")
-    ThreadingHTTPServer((host, port), BridgeHandler).serve_forever()
+    # Bind first: permission errors or an occupied port must not initialize the
+    # native SDK and its background threads.
+    server = ThreadingHTTPServer((host, port), BridgeHandler)
+    server.daemon_threads = False
+    initialized = False
+    try:
+        SDK = DahuaSdk()
+        initialized = True
+        print(f"MACS Dahua SDK bridge listening on http://{host}:{port}")
+        print(f"Using SDK: {SDK.sdk_path}")
+        server.serve_forever()
+    finally:
+        server.server_close()
+        if initialized:
+            SDK.lib.CLIENT_Cleanup()
+
+
+if __name__ == "__main__":
+    main()

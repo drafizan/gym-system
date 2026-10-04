@@ -193,6 +193,14 @@ class DahuaBridgeHeartbeat
      */
     private function startBridge(): array
     {
+        if (app()->runningUnitTests()) {
+            return [
+                'ok' => false,
+                'started' => false,
+                'message' => 'Dahua bridge process launch is disabled during automated tests.',
+            ];
+        }
+
         $script = $this->scriptPath();
 
         if (! File::exists($script)) {

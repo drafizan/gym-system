@@ -222,7 +222,7 @@
             ]]);
         }
 
-        $bridgeStatus = app(\App\Support\DahuaBridgeHeartbeat::class)->ensureRunning();
+        $bridgeStatus = app(\App\Support\DahuaBridgeHeartbeat::class)->status();
         $bridgeOnline = (bool) ($bridgeStatus['healthy'] ?? false);
     @endphp
 

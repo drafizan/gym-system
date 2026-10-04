@@ -27,6 +27,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Support\Audit;
 use App\Support\BackupManager;
+use App\Support\DahuaBridgeHeartbeat;
 use App\Support\DailySalesReport;
 use App\Support\DashboardMetrics;
 use App\Support\MembershipPeriod;
@@ -3672,4 +3673,13 @@ test('registration checkout rejects missing packages expired drafts and staff wi
     $this->actingAs($limited)->post(route('members.store'), [
         'registration_checkout' => 1, 'full_name' => 'No POS Access', 'phone' => '+60123456789',
     ])->assertForbidden();
+});
+
+test('automated tests cannot launch the native dahua bridge', function () {
+    Http::fake(['*' => Http::response(['ok' => false], 503)]);
+    $heartbeat = app(DahuaBridgeHeartbeat::class);
+    $start = new ReflectionMethod($heartbeat, 'startBridge');
+    $result = $start->invoke($heartbeat);
+    expect($result['started'])->toBeFalse()
+        ->and($result['message'])->toContain('disabled during automated tests');
 });

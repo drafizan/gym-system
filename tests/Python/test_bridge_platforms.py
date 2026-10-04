@@ -67,6 +67,25 @@ class BridgePlatformsTest(unittest.TestCase):
                 time.sleep(0.02)
             self.assertIn('SDK path with spaces', log.read_text())
 
+    def test_port_binding_failure_does_not_load_native_sdk(self):
+        bridge = load_script('dahua_sdk_bridge')
+        with patch.object(bridge, 'ThreadingHTTPServer', side_effect=PermissionError('bind denied')), \
+             patch.object(bridge, 'DahuaSdk') as sdk:
+            with self.assertRaises(PermissionError):
+                bridge.main()
+            sdk.assert_not_called()
+
+    def test_server_failure_cleans_up_native_sdk(self):
+        bridge = load_script('dahua_sdk_bridge')
+        server = Mock()
+        server.serve_forever.side_effect = RuntimeError('server stopped')
+        with patch.object(bridge, 'ThreadingHTTPServer', return_value=server), \
+             patch.object(bridge, 'DahuaSdk') as sdk, patch('builtins.print'):
+            with self.assertRaises(RuntimeError):
+                bridge.main()
+            server.server_close.assert_called_once()
+            sdk.return_value.lib.CLIENT_Cleanup.assert_called_once()
+
     def test_sdk_candidates_match_platform_and_custom_path_has_priority(self):
         for platform, filename in [('nt', 'dhnetsdk.dll'), ('posix', 'libdhnetsdk.so')]:
             with self.subTest(platform=platform), patch('os.name', platform), \
