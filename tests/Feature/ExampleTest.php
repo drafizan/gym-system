@@ -1053,7 +1053,7 @@ test('users with permission can register members with automatic member number', 
 
     $member = Member::query()->where('full_name', 'Ahmad Rizal')->firstOrFail();
 
-    expect(str_starts_with($member->member_no, 'GMG'.now()->format('ym')))->toBeTrue()
+    expect(str_starts_with($member->member_no, 'GMG'.now()->format('y')))->toBeTrue()
         ->and($member->full_name)->toBe('Ahmad Rizal')
         ->and($member->rfid_card_number)->toBe('RFID-10001')
         ->and($member->referred_by_member_id)->toBe($activeReferrer->id)
@@ -1389,9 +1389,9 @@ test('member submenu pages show suspended and missing photo worklists', function
         ->assertSee('Expired Member')
         ->assertSee('sale-type-pill danger', false)
         ->assertSee('Expired')
-        ->assertDontSee('Active With Photo')
+        ->assertSee('Active With Photo')
         ->assertDontSee('Suspended Member</td>', false)
-        ->assertDontSee('Missing Photo</td>', false);
+        ->assertSee('Missing Photo</td>', false);
 });
 
 test('sidebar opens only the active module group', function () {
@@ -3750,7 +3750,7 @@ test('cashier personal training menu only shows operational links', function () 
     foreach (['pt.trainers.index', 'pt.packages.index', 'pt.reports.commission'] as $route) {
         $response->assertDontSee('href="'.route($route).'"', false);
     }
-    foreach (['pt.member-packages.create', 'pt.schedule.index', 'pt.sessions.index'] as $route) {
+    foreach (['pt.member-packages.create', 'pt.schedule.create', 'pt.sessions.index'] as $route) {
         $response->assertSee('href="'.route($route).'"', false);
     }
     $response->assertSee('Manage Personal Training');
@@ -3788,4 +3788,157 @@ test('PT assignment prepares POS and creates sessions only after payment', funct
         ->post(route('sales.store'), ['registration_checkout_token' => $token, 'payment_method' => 'qr'])
         ->assertRedirect(route('sales.receipt', $sale));
     expect(PtMemberPackage::query()->count())->toBe(1)->and(Sale::query()->count())->toBe(1);
+});
+
+test('settings system update is administrator only and respects installation configuration', function () {
+    $role = roleWithPermissions(['settings.manage']);
+    $role->update(['name' => 'administrator']);
+    $admin = User::factory()->create(['role_id' => $role->id]);
+    $this->get(route('settings.system-update'))->assertStatus(405);
+    $this->actingAs($admin)->get(route('settings.index'))->assertOk()->assertSee('Update System');
+    config()->set('gym.deployment.enabled', false);
+    $this->post(route('settings.system-update'))->assertRedirect(route('settings.index'))->assertSessionHas('error');
+    $role->update(['name' => 'manager']);
+    $this->actingAs($admin->fresh())->get(route('settings.index'))->assertOk()->assertDontSee('Update System');
+    $this->post(route('settings.system-update'))->assertForbidden();
+});
+
+test('PT check-in consumes one session and duplicate submission does not consume another', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['pt.manage'])->id]);
+    $member = Member::factory()->create(['status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $member->id, 'status' => 'active', 'start_date' => now()->subDay(), 'end_date' => now()->addDays(30)]);
+    $package = PtPackage::query()->create(['name' => 'Check-in Pack', 'sessions_count' => 5, 'price' => 500, 'commission_per_session' => 30, 'status' => 'active']);
+    $balance = PtMemberPackage::query()->create(['member_id' => $member->id, 'pt_package_id' => $package->id, 'total_sessions' => 5, 'used_sessions' => 4, 'price' => 500, 'purchased_at' => today(), 'status' => 'active']);
+    $trainer = PtTrainer::query()->create(['name' => 'Check-in Coach', 'status' => 'active', 'commission_per_session' => 30]);
+    $payload = ['check_in' => 1, 'check_in_token' => (string) str()->uuid(), 'pt_member_package_ids' => [$balance->id], 'trainer_id' => $trainer->id, 'session_date' => today()->toDateString(), 'start_time' => '09:00', 'duration_minutes' => 60];
+    $this->actingAs($staff)->get(route('pt.schedule.create'))->assertOk()->assertSee('PT Session Check-in');
+    $this->post(route('pt.schedule.store'), $payload)->assertRedirect();
+    expect($balance->fresh()->used_sessions)->toBe(5)->and($balance->fresh()->remainingSessions())->toBe(0)
+        ->and($balance->fresh()->status)->toBe('completed')->and(PtSession::query()->first()->status)->toBe('completed');
+    $this->post(route('pt.schedule.store'), $payload)->assertRedirect();
+    expect($balance->fresh()->used_sessions)->toBe(5)->and(PtSession::query()->count())->toBe(1);
+    $payload['check_in_token'] = (string) str()->uuid();
+    $this->post(route('pt.schedule.store'), $payload)->assertSessionHasErrors();
+    expect(PtSession::query()->count())->toBe(1);
+});
+
+test('PT assignment only lists active members with currently valid memberships', function () {
+    $staff = User::factory()->create(['role_id' => roleWithPermissions(['pt.manage'])->id]);
+    $eligible = Member::factory()->create(['full_name' => 'Eligible PT Member', 'status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $eligible->id, 'status' => 'active', 'start_date' => today(), 'end_date' => today()]);
+    $excluded = [];
+    foreach (['expired', 'future', 'suspended', 'no-membership', 'inactive-member'] as $case) {
+        $member = Member::factory()->create(['full_name' => 'Excluded '.$case, 'status' => $case === 'inactive-member' ? 'suspended' : 'active']);
+        $excluded[] = $member;
+        if ($case !== 'no-membership') {
+            MemberMembership::factory()->create([
+                'member_id' => $member->id, 'status' => $case === 'suspended' ? 'suspended' : 'active',
+                'start_date' => $case === 'future' ? today()->addDay() : today()->subDays(30),
+                'end_date' => $case === 'expired' ? today()->subDay() : today()->addDays(30),
+            ]);
+        }
+    }
+    $response = $this->actingAs($staff)->get(route('pt.member-packages.create'))->assertOk()->assertSee($eligible->full_name);
+    foreach ($excluded as $member) {
+        $response->assertDontSee($member->full_name);
+    }
+});
+
+it('does not label members active without a paid current membership', function () {
+    $member = Member::factory()->create(['status' => 'active']);
+    expect($member->displayStatus())->toBe('expired');
+
+    $membership = MemberMembership::factory()->create([
+        'member_id' => $member->id,
+        'status' => 'active',
+        'start_date' => today()->addDay(),
+        'end_date' => today()->addDays(60),
+        'payment_status' => 'paid',
+    ]);
+    expect($member->fresh()->displayStatus())->toBe('not_started');
+
+    $membership->update(['start_date' => today(), 'payment_status' => 'unpaid']);
+    expect($member->fresh()->displayStatus())->toBe('pending_payment');
+
+    $membership->update(['payment_status' => 'paid']);
+    expect($member->fresh()->displayStatus())->toBe('active');
+
+    $membership->update(['start_date' => today()->subDays(30), 'end_date' => today()->subDay()]);
+    expect($member->fresh()->displayStatus())->toBe('expired');
+
+    $member->update(['status' => 'suspended']);
+    expect($member->fresh()->displayStatus())->toBe('suspended');
+});
+
+it('aligns expired and expiring member lists with current membership validity', function () {
+    $user = User::factory()->create(['role_id' => roleWithPermissions(['members.manage'])->id]);
+    $none = Member::factory()->create(['status' => 'active']);
+    $renewed = Member::factory()->create(['status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $renewed->id, 'start_date' => today()->subDays(40), 'end_date' => today()->subDays(10)]);
+    MemberMembership::factory()->create(['member_id' => $renewed->id, 'start_date' => today(), 'end_date' => today()->addDays(60)]);
+    $soon = Member::factory()->create(['status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $soon->id, 'start_date' => today(), 'end_date' => today()->addDay()]);
+    $unpaid = Member::factory()->create(['status' => 'active']);
+    MemberMembership::factory()->create(['member_id' => $unpaid->id, 'start_date' => today(), 'end_date' => today()->addDay(), 'payment_status' => 'unpaid']);
+
+    foreach ([route('members.expired'), route('members.index', ['filter' => 'expired'])] as $url) {
+        $this->actingAs($user)->get($url)->assertOk()->assertViewHas('members', fn ($members) => $members->pluck('id')->all() === [$none->id]);
+    }
+    foreach ([route('members.expiring-soon'), route('members.index', ['filter' => 'expiring'])] as $url) {
+        $this->actingAs($user)->get($url)->assertOk()->assertViewHas('members', fn ($members) => $members->pluck('id')->all() === [$soon->id]);
+    }
+});
+
+it('renumbers members chronologically within each registration year', function () {
+    $later = Member::factory()->create(['member_no' => 'GMG26060001', 'created_at' => '2026-06-02 10:00:00']);
+    $first = Member::factory()->create(['member_no' => 'GMG26060002', 'created_at' => '2026-06-01 10:00:00']);
+    $otherYear = Member::factory()->create(['member_no' => 'GMG25060001', 'created_at' => '2025-06-01 10:00:00']);
+    $savedAt = $first->updated_at;
+    $migration = require database_path('migrations/2026_10_04_000003_renumber_members_by_registration_year.php');
+    $migration->up();
+    expect($first->fresh()->member_no)->toBe('GMG2600001')
+        ->and($later->fresh()->member_no)->toBe('GMG2600002')
+        ->and($otherYear->fresh()->member_no)->toBe('GMG2500001')
+        ->and($first->fresh()->updated_at->equalTo($savedAt))->toBeTrue()
+        ->and(Member::nextMemberNumber('26'))->toBe('GMG2600003')
+        ->and(Member::nextMemberNumber('27'))->toBe('GMG2700001');
+});
+
+it('rejects invalid imported backup archives without adding history', function () {
+    $user = User::factory()->create(['role_id' => roleWithPermissions(['backup.manage'])->id]);
+    $this->actingAs($user)->post(route('backups.import'), [
+        'backup_file' => UploadedFile::fake()->createWithContent('broken.zip', 'not a zip'),
+    ])->assertSessionHasErrors('backup_file');
+    expect(BackupLog::query()->count())->toBe(0);
+});
+
+it('uploads a backup through the protected backup import action', function () {
+    $user = User::factory()->create(['role_id' => roleWithPermissions(['backup.manage'])->id]);
+    $this->mock(BackupManager::class, function ($mock) {
+        $mock->shouldReceive('backupPath')->andReturn(storage_path('app/backups'));
+        $mock->shouldReceive('import')->once()->andReturn(new BackupLog);
+    });
+    $this->actingAs($user)->get(route('backups.index'))->assertOk()->assertSee('Upload Backup');
+    $this->actingAs($user)->post(route('backups.import'), [
+        'backup_file' => UploadedFile::fake()->create('demo.zip', 10, 'application/zip'),
+    ])->assertRedirect(route('backups.index'))->assertSessionHas('success');
+});
+
+it('requires verified device read and write for door online status', function () {
+    $door = AccessControllerSetting::query()->create([
+        'name' => 'Handshake test', 'driver' => 'dahua_standalone', 'is_enabled' => true, 'host' => '192.0.2.1',
+        'encrypted_credentials' => ['username' => 'admin', 'password' => 'demo', 'bridge_url' => 'http://bridge.test/dahua'],
+    ]);
+    Http::fake(['bridge.test/*' => Http::sequence()
+        ->push(['ok' => true], 200)
+        ->push(['ok' => true, 'read_verified' => true, 'write_verified' => true], 200)
+        ->push(['ok' => false], 500)]);
+    expect($door->isOnline())->toBeFalse();
+    $door->encrypted_credentials = array_merge($door->encrypted_credentials, ['password' => 'updated']);
+    expect($door->isOnline())->toBeTrue();
+    expect($door->isOnline())->toBeTrue();
+    $door->encrypted_credentials = array_merge($door->encrypted_credentials, ['password' => 'wrong']);
+    expect($door->isOnline())->toBeFalse();
+    Http::assertSentCount(3);
+    Http::assertSent(fn ($request) => $request['command'] === 'handshake' && $request['door']['username'] === 'admin');
 });

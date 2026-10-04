@@ -23,13 +23,13 @@
     </div>
 
     @php
-        $selectedMemberId = old('member_id', $checkout['member_id'] ?? null);
+        $selectedMemberId = $checkout['member_id'] ?? old('member_id');
         $selectedMember = $members->firstWhere('id', (int) $selectedMemberId);
         $selectedMemberLabel = $selectedMember
             ? $selectedMember->full_name.' · '.$selectedMember->member_no
             : 'Walk-in / no member';
-        $selectedSaleType = old('sale_type', $checkout['sale_type'] ?? \App\Enums\SaleType::ProductSale->value);
-        $oldProductItems = collect(old('product_items', $checkout['product_items'] ?? []))
+        $selectedSaleType = $checkout['sale_type'] ?? old('sale_type', \App\Enums\SaleType::ProductSale->value);
+        $oldProductItems = collect($checkout['product_items'] ?? old('product_items', []))
             ->filter(fn ($item) => is_array($item))
             ->values();
         if ($oldProductItems->isEmpty()) {
@@ -78,7 +78,7 @@
                                 <option
                                     value="{{ $member->id }}"
                                     data-filter="{{ str($member->full_name.' '.$member->member_no.' '.$member->phone)->lower() }}"
-                                    @selected((string) old('member_id', $checkout['member_id'] ?? null) === (string) $member->id)
+                                    @selected((string) $selectedMemberId === (string) $member->id)
                                 >
                                     {{ $member->full_name }} · {{ $member->member_no }}
                                 </option>

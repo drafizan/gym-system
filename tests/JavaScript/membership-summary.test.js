@@ -73,3 +73,17 @@ test('PT assignment summary updates when package or price changes', () => {
     assert.equal(totals[0].textContent, 'RM 450.00');
     assert.equal(totals[1].textContent, 'RM 450.00');
 });
+
+test('locked PT checkout preserves PT sale type and selected package', () => {
+    const start = source.indexOf('    const syncSaleTypeAvailability = () => {');
+    const end = source.indexOf('    const syncAvailableProducts = () => {', start);
+    const pt = { value: 'pt_session', checked: true, disabled: true };
+    const product = { value: 'product_sale', checked: false, disabled: true };
+    vm.runInNewContext(source.slice(start, end) + '\nsyncSaleTypeAvailability();', {
+        form: { querySelector: () => ({ value: '1' }) },
+        saleTypeInputs: [product, pt],
+        hasSelectedMember: () => true,
+    });
+    assert.equal(pt.checked, true);
+    assert.equal(product.checked, false);
+});

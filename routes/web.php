@@ -14,6 +14,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\RfidCardController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SystemUpdateController;
 use App\Http\Controllers\UserManagementController;
 use App\Models\AccessControllerSetting;
 use App\Models\AccessSyncLog;
@@ -179,11 +180,13 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('permission:backup.manage')->group(function () {
         Route::get('/backups', [BackupController::class, 'index'])->name('backups.index');
         Route::post('/backups', [BackupController::class, 'store'])->name('backups.store');
+        Route::post('/backups/import', [BackupController::class, 'import'])->name('backups.import');
         Route::get('/backups/{backupLog}/download', [BackupController::class, 'download'])->name('backups.download');
         Route::post('/backups/{backupLog}/restore', [BackupController::class, 'restore'])->name('backups.restore');
     });
 
     Route::middleware('permission:settings.manage')->group(function () {
+        Route::post('/settings/system-update', SystemUpdateController::class)->name('settings.system-update');
         Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
         Route::get('/settings/backup/folders', [SettingsController::class, 'browseBackupFolders'])->name('settings.backup.folders');
         Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general.update');

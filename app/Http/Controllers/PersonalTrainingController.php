@@ -112,7 +112,13 @@ class PersonalTrainingController extends Controller
     public function createMemberPackage(): View
     {
         return view('pt.member-packages.create', [
-            'members' => Member::query()->orderBy('full_name')->get(['id', 'member_no', 'full_name', 'phone']),
+            'members' => Member::query()
+                ->where('status', RecordStatus::Active->value)
+                ->whereHas('memberships', fn ($query) => $query
+                    ->where('status', MembershipStatus::Active->value)
+                    ->whereDate('start_date', '<=', today()->toDateString())
+                    ->whereDate('end_date', '>=', today()->toDateString()))
+                ->orderBy('full_name')->get(['id', 'member_no', 'full_name', 'phone']),
             'packages' => PtPackage::query()->where('status', RecordStatus::Active->value)->orderBy('name')->get(),
             'paymentMethods' => app(SystemSettings::class)->paymentMethods(),
         ]);
@@ -185,6 +191,8 @@ class PersonalTrainingController extends Controller
     public function storeSchedule(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'check_in' => ['sometimes', 'boolean'],
+            'check_in_token' => ['required_if:check_in,1', 'nullable', 'uuid'],
             'pt_member_package_id' => ['nullable', 'exists:pt_member_packages,id'],
             'pt_member_package_ids' => ['nullable', 'array', 'max:20'],
             'pt_member_package_ids.*' => ['integer', 'exists:pt_member_packages,id'],
@@ -208,6 +216,10 @@ class PersonalTrainingController extends Controller
         }
 
         $scheduleDate = DB::transaction(function () use ($request, $validated, $memberPackageIds): string {
+            $checkIn = $request->boolean('check_in');
+            if ($checkIn && Carbon::parse($validated['session_date'])->isAfter(today())) {
+                throw ValidationException::withMessages(['session_date' => 'Check-in cannot be recorded for a future date.']);
+            }
             $trainer = PtTrainer::query()->findOrFail($validated['trainer_id']);
             $startAt = Carbon::parse($validated['session_date'].' '.$validated['start_time']);
             $endAt = $startAt->copy()->addMinutes((int) $validated['duration_minutes']);
@@ -223,11 +235,18 @@ class PersonalTrainingController extends Controller
                 ]);
             }
 
-            $memberPackages->each(fn (PtMemberPackage $memberPackage) => $this->ensureSchedulable($memberPackage, $trainer));
-            $this->ensureTrainerIsAvailable($trainer, $startAt, $endAt);
+            if ($checkIn && PtSession::query()->where('check_in_token', $validated['check_in_token'])->exists()) {
+                return $startAt->toDateString();
+            }
 
-            $memberPackages->each(function (PtMemberPackage $memberPackage) use ($request, $validated, $trainer, $startAt, $endAt): void {
+            $memberPackages->each(fn (PtMemberPackage $memberPackage) => $this->ensureSchedulable($memberPackage, $trainer));
+            if (! $checkIn) {
+                $this->ensureTrainerIsAvailable($trainer, $startAt, $endAt);
+            }
+
+            $memberPackages->each(function (PtMemberPackage $memberPackage) use ($request, $validated, $trainer, $startAt, $endAt, $checkIn): void {
                 $session = PtSession::query()->create([
+                    'check_in_token' => $checkIn ? $validated['check_in_token'] : null,
                     'pt_member_package_id' => $memberPackage->id,
                     'trainer_id' => $trainer->id,
                     'member_id' => $memberPackage->member_id,
@@ -235,13 +254,20 @@ class PersonalTrainingController extends Controller
                     'scheduled_start_at' => $startAt,
                     'scheduled_end_at' => $endAt,
                     'duration_minutes' => $validated['duration_minutes'],
-                    'status' => 'scheduled',
-                    'commission_amount' => 0,
+                    'status' => $checkIn ? 'completed' : 'scheduled',
+                    'commission_amount' => $checkIn ? (float) ($memberPackage->package?->commission_per_session ?? $trainer->commission_per_session) : 0,
                     'notes' => $validated['notes'] ?? null,
                     'recorded_by' => $request->user()?->id,
                 ]);
 
-                Audit::record($request, 'personal_training', 'session_scheduled', PtSession::class, $session->id, null, $session->toArray());
+                if ($checkIn) {
+                    $memberPackage->increment('used_sessions');
+                    if ($memberPackage->fresh()->remainingSessions() <= 0) {
+                        $memberPackage->update(['status' => 'completed']);
+                    }
+                }
+
+                Audit::record($request, 'personal_training', $checkIn ? 'session_checked_in' : 'session_scheduled', PtSession::class, $session->id, null, $session->toArray());
             });
 
             return $startAt->toDateString();
@@ -249,7 +275,7 @@ class PersonalTrainingController extends Controller
 
         return redirect()
             ->route('pt.schedule.index', ['date' => $scheduleDate])
-            ->with('success', 'PT schedule saved for '.$memberPackageIds->count().' member'.($memberPackageIds->count() === 1 ? '' : 's').'.');
+            ->with('success', ($request->boolean('check_in') ? 'PT check-in recorded and one session deducted for ' : 'PT schedule saved for ').$memberPackageIds->count().' member'.($memberPackageIds->count() === 1 ? '' : 's').'.');
     }
 
     public function completeScheduledSession(Request $request, PtSession $session): RedirectResponse
@@ -457,7 +483,7 @@ class PersonalTrainingController extends Controller
             ->whereDate('end_date', '>=', now()->toDateString())
             ->exists();
 
-        if (! $hasActiveMembership) {
+        if ($member->status !== RecordStatus::Active->value || ! $hasActiveMembership) {
             throw ValidationException::withMessages([
                 'member_id' => 'An active membership is required before buying PT packages.',
             ]);

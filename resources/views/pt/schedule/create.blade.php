@@ -1,11 +1,11 @@
 @extends('layouts.app')
 
-@section('title', 'Schedule PT Session')
+@section('title', 'PT Session Check-in')
 
 @section('breadcrumbs')
     <a href="{{ route('dashboard') }}">Home</a>
     <a href="{{ route('pt.schedule.index') }}">PT Schedule</a>
-    <span>Schedule Session</span>
+    <span>Session Check-in</span>
 @endsection
 
 @section('content')
@@ -20,13 +20,15 @@
     <div class="page-toolbar">
         <div>
             <p class="eyebrow">Personal Training</p>
-            <h1>Schedule PT Session</h1>
+            <h1>PT Session Check-in</h1>
         </div>
     </div>
 
-    <x-panel title="Schedule Details">
+    <x-panel title="Check-in Details">
         <form method="POST" action="{{ route('pt.schedule.store') }}" data-pt-schedule-form>
             @csrf
+            <input type="hidden" name="check_in" value="1">
+            <input type="hidden" name="check_in_token" value="{{ old('check_in_token', (string) Str::uuid()) }}">
             <div class="form-grid two-columns pt-schedule-grid">
                 <div class="form-row full-width">
                     <span>Eligible Members</span>
@@ -124,7 +126,7 @@
                 </label>
                 <label class="form-row">
                     <span>Start Time</span>
-                    <input type="time" name="start_time" value="{{ old('start_time', '09:00') }}" required>
+                    <input type="time" name="start_time" value="{{ old('start_time', now()->format('H:i')) }}" required>
                 </label>
                 <label class="form-row">
                     <span>Duration</span>
@@ -137,7 +139,7 @@
             </div>
             <div class="form-actions">
                 <a class="btn btn-light" href="{{ route('pt.schedule.index') }}">Cancel</a>
-                <button class="btn btn-primary" type="submit">Save Schedule</button>
+                <button class="btn btn-primary" type="submit">Check In & Deduct Session</button>
             </div>
         </form>
     </x-panel>

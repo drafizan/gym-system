@@ -759,13 +759,16 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
     const selectedOption = (select) => select?.options?.[select.selectedIndex];
     const productLines = () => Array.from(form.querySelectorAll('[data-pos-product-line]'));
     const syncSaleTypeAvailability = () => {
+        if (form.querySelector('[data-pos-checkout-locked]')) {
+            return;
+        }
         const ptSaleInput = saleTypeInputs.find((input) => input.value === 'pt_session');
 
         if (!ptSaleInput) {
             return;
         }
 
-        const disabled = !hasSelectedMember() || !!form.querySelector('[data-pos-checkout-locked]');
+        const disabled = !hasSelectedMember();
         ptSaleInput.disabled = disabled;
         ptSaleInput.closest('.pos-type-option')?.classList.toggle('is-disabled', disabled);
 

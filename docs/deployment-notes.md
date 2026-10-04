@@ -233,3 +233,26 @@ Then verify manually:
 - Backup now and backup download
 - Audit log visibility
 - Settings save flow
+
+## Settings System Update
+
+Administrators can use **Settings → Update System** to update a main-branch
+installation from Git, install PHP/frontend dependencies, build assets, run
+`php artisan migrate --force`, refresh caches, and restart queue workers.
+Migration files in the pulled version apply the required database-table changes;
+the updater does not reseed the database or replace existing member records.
+
+Enable the button's update action on each installation:
+
+```dotenv
+DEPLOYMENT_UPDATES_ENABLED=true
+DEPLOYMENT_TIMEOUT=900
+```
+
+The web service account needs Git access to `origin`, PHP CLI, Composer, npm,
+and write access to the application. Windows and Unix use the shared
+`scripts/deploy.php`; `scripts/deploy.sh` delegates to it for existing Unix setups.
+The application must be on `main` with a clean working tree. Updates stop on
+local changes, non-fast-forward pulls, or a failed install/build/migration step.
+Only one updater runs at a time. Settings displays the result and command output.
+Do not run the button against a working checkout with uncommitted changes.

@@ -14,7 +14,7 @@
             <h1>PT Schedule</h1>
         </div>
         <div class="toolbar-actions">
-            <a class="btn btn-primary" href="{{ route('pt.schedule.create') }}">Schedule Session</a>
+            <a class="btn btn-primary" href="{{ route('pt.schedule.create') }}">PT Session Check-in</a>
         </div>
     </div>
 

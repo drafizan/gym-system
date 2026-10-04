@@ -42,7 +42,7 @@ class Member extends Model
     protected static function booted(): void
     {
         static::creating(function (Member $member): void {
-            $member->member_no ??= static::nextMemberNumber();
+            $member->member_no ??= static::nextMemberNumber($member->created_at?->format('y'));
         });
     }
 
@@ -53,17 +53,21 @@ class Member extends Model
         ];
     }
 
-    public static function nextMemberNumber(): string
+    public static function nextMemberNumber(?string $year = null): string
     {
-        $prefix = 'GMG'.now()->format('ym');
+        $prefix = 'GMG'.($year ?? now()->format('y'));
         $latest = static::query()
             ->where('member_no', 'like', $prefix.'%')
             ->orderByDesc('member_no')
             ->value('member_no');
 
-        $sequence = $latest ? ((int) substr($latest, -4)) + 1 : 1;
+        $sequence = $latest ? ((int) substr($latest, -5)) + 1 : 1;
 
-        return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+        if ($sequence > 99999) {
+            throw new \OverflowException('The yearly member number limit has been reached.');
+        }
+
+        return $prefix.str_pad((string) $sequence, 5, '0', STR_PAD_LEFT);
     }
 
     public function creator(): BelongsTo
@@ -137,7 +141,7 @@ class Member extends Model
         $membership = $this->latestMembership;
 
         if (! $membership) {
-            return $this->status;
+            return MembershipStatus::Expired->value;
         }
 
         if (
@@ -154,6 +158,18 @@ class Member extends Model
             MembershipStatus::Suspended->value,
             MembershipStatus::Cancelled->value,
         ], true)) {
+            return $membership->status;
+        }
+
+        if ($membership->payment_status !== 'paid') {
+            return 'pending_payment';
+        }
+
+        if ($membership->start_date->gt(now()->startOfDay())) {
+            return 'not_started';
+        }
+
+        if ($membership->status !== MembershipStatus::Active->value) {
             return $membership->status;
         }
 

@@ -63,7 +63,7 @@
                         ['label' => 'Trainers', 'route' => 'pt.trainers.index', 'hide_for_cashier' => true],
                         ['label' => 'PT Packages', 'route' => 'pt.packages.index', 'hide_for_cashier' => true],
                         ['label' => 'Assign Package', 'route' => 'pt.member-packages.create'],
-                        ['label' => 'Schedule', 'route' => 'pt.schedule.index'],
+                        ['label' => 'PT Session Check-in', 'route' => 'pt.schedule.create'],
                         ['label' => 'Session Tracking', 'route' => 'pt.sessions.index'],
                         ['label' => 'Commission Report', 'route' => 'pt.reports.commission', 'hide_for_cashier' => true],
                     ],

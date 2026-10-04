@@ -50,8 +50,6 @@
             @if (auth()->user()?->hasPermission('memberships.manage'))
                 @if ($membership)
                     <a class="btn btn-primary" href="{{ route('member-memberships.renew', [$member, $membership]) }}">Renew Membership</a>
-                @else
-                    <a class="btn btn-primary" href="{{ route('member-memberships.create', $member) }}">Assign Membership</a>
                 @endif
             @endif
             @if ($member->isSuspended())

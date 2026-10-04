@@ -104,22 +104,10 @@ class MemberController extends Controller
                 $query->whereNull('photo_path');
             })
             ->when(! empty($options['expiredMembership']), function ($query): void {
-                $query->whereHas('memberships', function ($query): void {
-                    $query->where('status', MembershipStatus::Expired->value)
-                        ->orWhere(function ($query): void {
-                            $query->where('status', MembershipStatus::Active->value)
-                                ->whereDate('end_date', '<', now()->toDateString());
-                        });
-                });
+                $this->applyMemberFilter($query, 'expired');
             })
             ->when(! empty($options['expiringSoonMembership']), function ($query): void {
-                $query->whereHas('memberships', function ($query): void {
-                    $query->where('status', MembershipStatus::Active->value)
-                        ->whereBetween('end_date', [
-                            now()->toDateString(),
-                            now()->addDays(app(SystemSettings::class)->integer('expiring_soon_days'))->toDateString(),
-                        ]);
-                });
+                $this->applyMemberFilter($query, 'expiring');
             })
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
@@ -135,21 +123,26 @@ class MemberController extends Controller
     private function applyMemberFilter(Builder $query, string $filter): void
     {
         match ($filter) {
-            'active' => $query->where('status', RecordStatus::Active->value)
-                ->whereHas('memberships', fn ($query) => $query
-                    ->where('status', MembershipStatus::Active->value)
-                    ->whereDate('end_date', '>=', now()->toDateString())),
-            'expiring' => $query->whereHas('memberships', fn ($query) => $query
-                ->where('status', MembershipStatus::Active->value)
-                ->whereBetween('end_date', [
-                    now()->toDateString(),
-                    now()->addDays(app(SystemSettings::class)->integer('expiring_soon_days'))->toDateString(),
-                ])),
-            'expired' => $query->whereHas('memberships', fn ($query) => $query
-                ->where('status', MembershipStatus::Expired->value)
-                ->orWhere(fn ($query) => $query
-                    ->where('status', MembershipStatus::Active->value)
-                    ->whereDate('end_date', '<', now()->toDateString()))),
+            'active', 'expiring' => $query->where('status', RecordStatus::Active->value)
+                ->whereHas('latestMembership', function ($query) use ($filter): void {
+                    $query->where('status', MembershipStatus::Active->value)
+                        ->where('payment_status', 'paid')
+                        ->whereDate('start_date', '<=', today()->toDateString())
+                        ->whereDate('end_date', '>=', today()->toDateString());
+
+                    if ($filter === 'expiring') {
+                        $query->whereDate('end_date', '<=', today()->addDays(app(SystemSettings::class)->integer('expiring_soon_days'))->toDateString());
+                    }
+                }),
+            'expired' => $query->where('status', RecordStatus::Active->value)
+                ->where(function ($query): void {
+                    $query->whereDoesntHave('memberships')
+                        ->orWhereHas('latestMembership', fn ($query) => $query
+                            ->where('status', MembershipStatus::Expired->value)
+                            ->orWhere(fn ($query) => $query
+                                ->where('status', MembershipStatus::Active->value)
+                                ->whereDate('end_date', '<', today()->toDateString())));
+                }),
             'suspended' => $query->where('status', RecordStatus::Suspended->value),
             'missing_photo' => $query->whereNull('photo_path'),
             'has_rfid' => $query->where(fn ($query) => $query

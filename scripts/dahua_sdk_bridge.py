@@ -670,6 +670,22 @@ class DahuaSdk:
     def logout(self, handle: int) -> None:
         self.lib.CLIENT_Logout(ctypes.c_longlong(handle))
 
+    def handshake(self, door: dict[str, Any]) -> dict[str, Any]:
+        handle = self.login(door)
+        try:
+            device_time = NetTime()
+            if not self.lib.CLIENT_QueryDeviceTime(ctypes.c_longlong(handle), ctypes.byref(device_time), 3000):
+                raise RuntimeError(f"Handshake read failed. sdk_error={self.last_error()}")
+            # Write back the device's own clock value; do not touch cards or access rights.
+            if not self.lib.CLIENT_SetupDeviceTime(ctypes.c_longlong(handle), ctypes.byref(device_time)):
+                raise RuntimeError(f"Handshake write failed. sdk_error={self.last_error()}")
+            verified_time = NetTime()
+            if not self.lib.CLIENT_QueryDeviceTime(ctypes.c_longlong(handle), ctypes.byref(verified_time), 3000):
+                raise RuntimeError(f"Handshake verification failed. sdk_error={self.last_error()}")
+            return {"read_verified": True, "write_verified": True}
+        finally:
+            self.logout(handle)
+
     def query_time(self, door: dict[str, Any]) -> dict[str, Any]:
         handle = self.login(door)
         try:
@@ -1495,7 +1511,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
             door = payload.get("door") or {}
             options = payload.get("options") or {}
 
-            if command == "status":
+            if command == "handshake":
+                result = SDK.handshake(door)
+            elif command == "status":
                 result = SDK.query_time(door)
             elif command == "sync-time":
                 result = SDK.sync_time(door, options)

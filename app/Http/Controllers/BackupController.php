@@ -12,6 +12,19 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BackupController extends Controller
 {
+    public function import(Request $request, BackupManager $backups): RedirectResponse
+    {
+        $request->validate(['backup_file' => ['required', 'file', 'max:524288', 'extensions:zip']]);
+
+        try {
+            $backups->import($request->file('backup_file'), $request->user());
+        } catch (\InvalidArgumentException $exception) {
+            return back()->withErrors(['backup_file' => $exception->getMessage()]);
+        }
+
+        return redirect()->route('backups.index')->with('success', 'Backup uploaded. Select Restore Backup to copy its data into this deployment.');
+    }
+
     public function index(BackupManager $backups): View
     {
         $latest = BackupLog::query()->latest()->first();

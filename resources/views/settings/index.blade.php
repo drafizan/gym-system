@@ -15,6 +15,22 @@
         </div>
     </div>
 
+    @if (auth()->user()?->role?->name === 'administrator')
+        <section class="form-card settings-account-card">
+            <div class="form-section-header"><h2>System Update</h2></div>
+            <div class="settings-action-row">
+                <div><strong>Update from Git</strong><span>Pull the latest version, build assets, and update database tables.</span></div>
+                <form method="POST" action="{{ route('settings.system-update') }}" onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Updating…';">
+                    @csrf
+                    <button class="btn btn-primary" type="submit">Update System</button>
+                </form>
+            </div>
+            @if (session('deployment_output'))
+                <pre style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ session('deployment_output') }}</pre>
+            @endif
+        </section>
+    @endif
+
     <section class="form-card settings-account-card">
         <div class="form-section-header">
             <h2>Account Security</h2>

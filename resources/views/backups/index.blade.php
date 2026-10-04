@@ -37,6 +37,17 @@
         </div>
     </section>
 
+    <section class="panel">
+        <h2>Upload Backup</h2>
+        <p>Upload a backup ZIP from another deployment, then restore it from Backup History.</p>
+        <form method="POST" action="{{ route('backups.import') }}" enctype="multipart/form-data">
+            @csrf
+            <label class="field"><span>Backup ZIP (maximum 512 MB)</span><input type="file" name="backup_file" accept=".zip" required></label>
+            @error('backup_file')<p class="field-error">{{ $message }}</p>@enderror
+            <button class="btn btn-primary" type="submit">Upload Backup</button>
+        </form>
+    </section>
+
     <section class="table-shell">
         <div class="table-shell-header">
             <h2>Backup History</h2>

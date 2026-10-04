@@ -90,8 +90,8 @@
                 <label class="field join-date-field">
                     <span>Join Date</span>
                     <div class="readonly-date">
-                        <strong>{{ now()->format('d/m/Y') }}</strong>
-                        <small>Auto generated when member is saved</small>
+                        <strong>{{ $member->created_at?->timezone(config('app.timezone'))->format('d/m/Y') ?? 'Set on first save' }}</strong>
+                        <small>{{ $member->exists ? 'Original member creation date' : 'Automatically recorded when member is first saved' }}</small>
                     </div>
                 </label>
 
@@ -303,6 +303,9 @@
                 <span>Remarks</span>
                 <textarea name="remarks" rows="3" placeholder="Internal remarks (optional)">{{ old('remarks', $member->remarks) }}</textarea>
             </label>
+            @if ($member->exists)
+                <p class="field-help">Latest profile save: {{ $member->updated_at?->timezone(config('app.timezone'))->format('d/m/Y, h:i A') ?? '-' }}</p>
+            @endif
         </section>
     </div>
 </div>

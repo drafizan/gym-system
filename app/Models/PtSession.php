@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'check_in_token',
     'pt_member_package_id',
     'trainer_id',
     'member_id',
