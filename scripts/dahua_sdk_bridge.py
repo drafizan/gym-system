@@ -907,6 +907,15 @@ class DahuaSdk:
             total_count = int(start_output.nTotalCount)
             cursor = 0
 
+            if total_count == 0:
+                return {
+                    "cards": [],
+                    "count": 0,
+                    "total_count": 0,
+                    "limit": limit,
+                    "sdk_path": self.sdk_path,
+                }
+
             while len(cards) < limit and (total_count <= 0 or cursor < total_count):
                 remaining = limit - len(cards)
                 requested = min(batch_size, remaining)
