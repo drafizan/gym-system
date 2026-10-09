@@ -237,6 +237,7 @@ class DahuaStandaloneAccessControllerClient implements AccessControllerClient
             ],
             'card' => [
                 'number' => $this->normalizeCardNumber($cardNumber, (string) ($credentials['card_number_format'] ?? 'decimal')),
+                'previous_number' => $this->normalizeCardNumber((string) ($sourcePayload['previous_card_number'] ?? ''), (string) ($credentials['card_number_format'] ?? 'decimal')),
                 'format' => $credentials['card_number_format'] ?? 'decimal',
                 'status' => $sourcePayload['card_status'] ?? null,
             ],

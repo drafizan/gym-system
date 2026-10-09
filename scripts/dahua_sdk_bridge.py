@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -734,6 +735,11 @@ class DahuaSdk:
 
         card_number = self._card_number(card)
         input_card_number = self._clean_text(card.get("number"), NET_MAX_CARDNO_LEN - 1)
+        previous_input_card_number = self._clean_text(card.get("previous_number"), NET_MAX_CARDNO_LEN - 1)
+        previous_card_number = self._card_number({
+            "number": previous_input_card_number,
+            "format": card.get("format"),
+        }) if previous_input_card_number else ""
 
         if not action:
             raise ValueError("Sync action is required.")
@@ -762,6 +768,14 @@ class DahuaSdk:
 
             user_id = self._device_user_id(user)
             user_name = self._clean_text(user.get("name") or user.get("member_no") or user_id, 64)
+            replacement_cleanup: dict[str, Any] = {}
+            if action == "update_card" and previous_card_number and previous_card_number != card_number:
+                replacement_cleanup = {
+                    "previous_card": self._try_remove_card(handle, previous_card_number),
+                    "previous_user": self._try_remove_user(handle, user_id),
+                }
+                time.sleep(1.0)
+
             user_result = self._upsert_user_service(handle, user_id, user_name, validity)
             card_result = self._upsert_card_service(handle, card_number, user_id)
 
@@ -774,6 +788,7 @@ class DahuaSdk:
                     "user_id": user_id,
                     "user_service": user_result,
                     "card_service": card_result,
+                    "replacement_cleanup": replacement_cleanup,
                     "sdk_path": self.sdk_path,
                 }
 
@@ -786,6 +801,7 @@ class DahuaSdk:
                 "user_id": user_id,
                 "user_service": user_result,
                 "card_service": card_result,
+                "replacement_cleanup": replacement_cleanup,
                 **record_result,
                 "sdk_path": self.sdk_path,
             }
@@ -1146,6 +1162,45 @@ class DahuaSdk:
             "struct_size": ctypes.sizeof(user_info),
         }
 
+    def _remove_user(self, handle: int, user_id: str) -> dict[str, Any]:
+        if not self.has_access_user_service:
+            raise RuntimeError("CLIENT_OperateAccessUserService is not available in this SDK.")
+
+        input_param = NetInAccessUserServiceRemove()
+        output_param = NetOutAccessUserServiceRemove()
+        fail_code = FailCode()
+        input_param.nUserNum = 1
+        self._set_c_string(input_param.szUserIDs[0], "szUserID", user_id)
+        output_param.nMaxRetNum = 1
+        output_param.pFailCode = ctypes.cast(ctypes.byref(fail_code), ctypes.c_void_p)
+
+        ok = self.lib.CLIENT_OperateAccessUserService(
+            ctypes.c_longlong(handle),
+            NET_EM_ACCESS_CTL_USER_SERVICE_REMOVE,
+            ctypes.byref(input_param),
+            ctypes.byref(output_param),
+            8000,
+        )
+
+        if not ok:
+            raise RuntimeError(f"Remove user failed. sdk_error={self.last_error()} fail_code={fail_code.nFailCode}")
+
+        return {"fail_code": int(fail_code.nFailCode)}
+
+    def _try_remove_user(self, handle: int, user_id: str) -> dict[str, Any]:
+        try:
+            return {
+                "user_id": user_id,
+                "status": "removed",
+                **self._remove_user(handle, user_id),
+            }
+        except Exception as exc:
+            return {
+                "user_id": user_id,
+                "status": "skipped",
+                "message": str(exc),
+            }
+
     def _upsert_card_service(self, handle: int, card_number: str, user_id: str) -> dict[str, Any]:
         if not self.has_access_card_service:
             return {"ok": False, "message": "CLIENT_OperateAccessCardService is not available in this SDK."}
@@ -1351,9 +1406,6 @@ class DahuaSdk:
         normalized = card_number.strip().upper()
 
         if not normalized or not all(ch in "0123456789ABCDEF" for ch in normalized):
-            return ""
-
-        if not any(ch in "ABCDEF" for ch in normalized):
             return ""
 
         return str(int(normalized, 16)).zfill(10)

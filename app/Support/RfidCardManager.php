@@ -64,7 +64,9 @@ class RfidCardManager
 
             $card->member?->forceFill(['rfid_card_number' => $newCardNumber])->save();
 
-            $this->queueSync($card, AccessSyncAction::UpdateCard);
+            $this->queueSync($card, AccessSyncAction::UpdateCard, [
+                'previous_card_number' => $oldValues['card_number'],
+            ]);
             Audit::record($request, 'rfid_cards', 'updated', RfidCard::class, $card->id, $oldValues, $card->fresh()->toArray());
 
             return $card->fresh();
@@ -203,7 +205,10 @@ class RfidCardManager
         }
     }
 
-    private function queueSync(RfidCard $card, AccessSyncAction $action): void
+    /**
+     * @param  array<string, mixed>  $additionalPayload
+     */
+    private function queueSync(RfidCard $card, AccessSyncAction $action, array $additionalPayload = []): void
     {
         $card->loadMissing('member.latestMembership');
         $membership = $card->member?->latestMembership;
@@ -221,6 +226,7 @@ class RfidCardManager
                 'membership_status' => $membership?->status,
                 'start_date' => $membership?->start_date?->toDateString(),
                 'end_date' => $membership?->end_date?->toDateString(),
+                ...$additionalPayload,
             ],
         ]);
     }
