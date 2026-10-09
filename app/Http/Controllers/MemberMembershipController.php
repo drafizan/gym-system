@@ -156,6 +156,7 @@ class MemberMembershipController extends Controller
                 'rfid_card_number' => $membership->member?->rfid_card_number,
                 'membership_status' => $membership->status,
                 'start_date' => $membership->start_date?->toDateString(),
+                'start_at' => $membership->accessStartsAt()->format('Y-m-d H:i:s'),
                 'end_date' => $membership->end_date?->toDateString(),
             ],
         ]);

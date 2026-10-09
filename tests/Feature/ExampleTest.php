@@ -1146,6 +1146,7 @@ test('member edit card number changes queue rfid sync with membership validity',
         ->and($syncLog->status)->toBe('pending')
         ->and($syncLog->payload['card_number'])->toBe('0002694641')
         ->and($syncLog->payload['start_date'])->toBe('2026-06-19')
+        ->and($syncLog->payload['start_at'])->toBe('2026-06-19 00:00:00')
         ->and($syncLog->payload['end_date'])->toBe('2026-07-18');
 });
 

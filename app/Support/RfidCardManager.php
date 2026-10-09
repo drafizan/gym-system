@@ -225,6 +225,7 @@ class RfidCardManager
                 'card_status' => $card->status,
                 'membership_status' => $membership?->status,
                 'start_date' => $membership?->start_date?->toDateString(),
+                'start_at' => $membership?->accessStartsAt()->format('Y-m-d H:i:s'),
                 'end_date' => $membership?->end_date?->toDateString(),
                 ...$additionalPayload,
             ],

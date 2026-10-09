@@ -242,7 +242,7 @@ class DahuaStandaloneAccessControllerClient implements AccessControllerClient
                 'status' => $sourcePayload['card_status'] ?? null,
             ],
             'validity' => [
-                'start_date' => $sourcePayload['start_date'] ?? null,
+                'start_date' => $sourcePayload['start_at'] ?? $sourcePayload['start_date'] ?? null,
                 'end_date' => $sourcePayload['end_date'] ?? null,
                 'membership_status' => $sourcePayload['membership_status'] ?? null,
             ],

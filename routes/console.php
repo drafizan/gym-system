@@ -104,6 +104,7 @@ Artisan::command('access:sync-authorized {--limit=500 : Maximum authorized cards
             'member' => fn ($query) => $query->with(['memberships' => fn ($membershipQuery) => $membershipQuery
                 ->with('package')
                 ->where('status', MembershipStatus::Active->value)
+                ->whereDate('start_date', '<=', $today)
                 ->whereDate('end_date', '>=', $today)
                 ->whereHas('package', fn ($packageQuery) => $packageQuery->where('access_allowed', true))
                 ->orderByDesc('end_date'),
@@ -116,6 +117,7 @@ Artisan::command('access:sync-authorized {--limit=500 : Maximum authorized cards
                 ->whereHas('memberships', function ($membershipQuery) use ($today): void {
                     $membershipQuery
                         ->where('status', MembershipStatus::Active->value)
+                        ->whereDate('start_date', '<=', $today)
                         ->whereDate('end_date', '>=', $today)
                         ->whereHas('package', fn ($packageQuery) => $packageQuery->where('access_allowed', true));
                 });
@@ -128,6 +130,7 @@ Artisan::command('access:sync-authorized {--limit=500 : Maximum authorized cards
         $this->warn('No authorized active RFID cards found in MACS.');
         $this->line('Active members: '.MemberMembership::query()
             ->where('status', MembershipStatus::Active->value)
+            ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today)
             ->distinct('member_id')
             ->count('member_id'));
@@ -136,6 +139,7 @@ Artisan::command('access:sync-authorized {--limit=500 : Maximum authorized cards
             ->count());
         $this->line('Active access-allowed memberships: '.MemberMembership::query()
             ->where('status', MembershipStatus::Active->value)
+            ->whereDate('start_date', '<=', $today)
             ->whereDate('end_date', '>=', $today)
             ->whereHas('package', fn ($packageQuery) => $packageQuery->where('access_allowed', true))
             ->count());
@@ -160,6 +164,7 @@ Artisan::command('access:sync-authorized {--limit=500 : Maximum authorized cards
                 'card_status' => $card->status,
                 'membership_status' => $membership?->status,
                 'start_date' => $membership?->start_date?->toDateString(),
+                'start_at' => $membership?->accessStartsAt()->format('Y-m-d H:i:s'),
                 'end_date' => $membership?->end_date?->toDateString(),
                 'source' => 'authorized-access-full-sync',
             ],
@@ -203,6 +208,7 @@ Artisan::command('access:diagnose-card {card : RFID card number printed on the c
         $member = $card->member;
         $eligibleMemberships = $member?->memberships
             ->filter(fn (MemberMembership $membership): bool => $membership->status === MembershipStatus::Active->value
+                && $membership->start_date?->toDateString() <= $today
                 && $membership->end_date?->toDateString() >= $today
                 && (bool) $membership->package?->access_allowed)
             ->values() ?? collect();
@@ -333,6 +339,7 @@ Artisan::command('access:verify-card-list {door=1st Floor Door : Door id or name
                 ->whereHas('memberships', function ($membershipQuery): void {
                     $membershipQuery
                         ->where('status', MembershipStatus::Active->value)
+                        ->whereDate('start_date', '<=', now()->toDateString())
                         ->whereDate('end_date', '>=', now()->toDateString())
                         ->whereHas('package', fn ($packageQuery) => $packageQuery->where('access_allowed', true));
                 });
@@ -462,7 +469,7 @@ Artisan::command('backup:run {--type=scheduled}', function (BackupManager $manag
 })->purpose('Create a local system backup');
 
 Schedule::command('access:bridge-heartbeat')->everyMinute()->withoutOverlapping();
-Schedule::command('access:sync-pending')->everyThirtyMinutes();
+Schedule::command('access:sync-pending')->everyTwoMinutes()->withoutOverlapping();
 Schedule::command('memberships:detect-expired --sync --sync-limit=500')->dailyAt('21:00')->withoutOverlapping();
 Schedule::command('backup:run')
     ->dailyAt('22:00')
