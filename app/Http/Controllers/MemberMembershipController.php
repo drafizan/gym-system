@@ -141,7 +141,13 @@ class MemberMembershipController extends Controller
 
     private function createAccessSync(MemberMembership $membership): void
     {
-        $membership->loadMissing(['member', 'package']);
+        $membership->loadMissing(['member.activeRfidCard', 'package']);
+        $card = $membership->member?->activeRfidCard;
+
+        if (! $card) {
+            return;
+        }
+
         $action = $membership->status === MembershipStatus::Active->value && $membership->package?->access_allowed
             ? AccessSyncAction::EnableCard->value
             : AccessSyncAction::DisableCard->value;
@@ -149,11 +155,14 @@ class MemberMembershipController extends Controller
         AccessSyncLog::query()->create([
             'member_id' => $membership->member_id,
             'member_membership_id' => $membership->id,
+            'rfid_card_id' => $card->id,
             'action' => $action,
             'status' => 'pending',
             'payload' => [
                 'member_no' => $membership->member?->member_no,
-                'rfid_card_number' => $membership->member?->rfid_card_number,
+                'card_number' => $card->card_number,
+                'rfid_card_number' => $card->card_number,
+                'card_status' => $card->status,
                 'membership_status' => $membership->status,
                 'start_date' => $membership->start_date?->toDateString(),
                 'start_at' => $membership->accessStartsAt()->format('Y-m-d H:i:s'),

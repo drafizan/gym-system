@@ -1581,6 +1581,7 @@ test('memberships can be assigned and renewed using expiry rules', function () {
         'role_id' => roleWithPermissions(['memberships.manage'])->id,
     ]);
     $member = Member::factory()->create();
+    $card = app(RfidCardManager::class)->assign(rfidRequestFor($user), $member, 'RFID-MEMBERSHIP-1');
     $package = MembershipPackage::factory()->create([
         'name' => 'Monthly',
         'duration_days' => 30,
@@ -1598,9 +1599,16 @@ test('memberships can be assigned and renewed using expiry rules', function () {
 
     $membership = MemberMembership::query()->firstOrFail();
 
+    $syncLog = AccessSyncLog::query()
+        ->where('member_membership_id', $membership->id)
+        ->where('action', 'ENABLE_CARD')
+        ->firstOrFail();
+
     expect($membership->end_date->format('Y-m-d'))->toBe('2026-07-17')
         ->and($membership->status)->toBe('active')
-        ->and(AccessSyncLog::query()->where('action', 'ENABLE_CARD')->exists())->toBeTrue()
+        ->and($syncLog->rfid_card_id)->toBe($card->id)
+        ->and($syncLog->payload['card_number'])->toBe('RFID-MEMBERSHIP-1')
+        ->and($syncLog->payload['rfid_card_number'])->toBe('RFID-MEMBERSHIP-1')
         ->and(AuditLog::query()->where('action', 'assigned')->exists())->toBeTrue();
 
     $this->actingAs($user)
@@ -2983,6 +2991,7 @@ test('sales backend blocks inactive or insufficient stock products', function ()
 test('sales backend creates memberships for membership sales and queues access sync', function () {
     $cashier = User::factory()->create();
     $member = Member::factory()->create();
+    $card = app(RfidCardManager::class)->assign(rfidRequestFor($cashier), $member, 'RFID-SALE-1');
     $package = MembershipPackage::factory()->create([
         'name' => 'Monthly',
         'duration_days' => 30,
@@ -2998,12 +3007,41 @@ test('sales backend creates memberships for membership sales and queues access s
     ]);
 
     $membership = MemberMembership::query()->firstOrFail();
+    $syncLog = AccessSyncLog::query()
+        ->where('member_membership_id', $membership->id)
+        ->where('action', 'ENABLE_CARD')
+        ->firstOrFail();
 
     expect($sale->items)->toHaveCount(1)
         ->and($membership->end_date->format('Y-m-d'))->toBe('2026-07-18')
         ->and((float) $membership->amount)->toBe(150.0)
-        ->and(AccessSyncLog::query()->where('member_membership_id', $membership->id)->where('action', 'ENABLE_CARD')->exists())->toBeTrue()
+        ->and($syncLog->rfid_card_id)->toBe($card->id)
+        ->and($syncLog->payload['card_number'])->toBe('RFID-SALE-1')
+        ->and($syncLog->payload['rfid_card_number'])->toBe('RFID-SALE-1')
         ->and(AuditLog::query()->where('module', 'memberships')->where('action', 'assigned')->exists())->toBeTrue();
+});
+
+test('membership sales without an active rfid card do not queue invalid access syncs', function () {
+    $cashier = User::factory()->create();
+    $member = Member::factory()->create();
+    $package = MembershipPackage::factory()->create([
+        'duration_days' => 30,
+        'price' => 150,
+    ]);
+
+    app(SalesManager::class)->complete(staffRequestFor($cashier), [
+        'sale_type' => SaleType::MembershipSale->value,
+        'member_id' => $member->id,
+        'membership_package_id' => $package->id,
+        'start_date' => '2026-06-19',
+        'payment_method' => 'cash',
+    ]);
+
+    $membership = MemberMembership::query()->firstOrFail();
+
+    expect(AccessSyncLog::query()
+        ->where('member_membership_id', $membership->id)
+        ->exists())->toBeFalse();
 });
 
 test('only managers and administrators can void completed sales and restore product stock', function () {
