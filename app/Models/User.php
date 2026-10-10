@@ -57,4 +57,10 @@ class User extends Authenticatable
 
         return false;
     }
+
+    public function canSyncDoorAccess(): bool
+    {
+        return $this->is_active !== false
+            && ($this->hasPermission('access.manage') || $this->role?->name === 'cashier');
+    }
 }

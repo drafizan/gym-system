@@ -131,17 +131,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/pt/commission-report', [PersonalTrainingController::class, 'commissionReport'])->name('pt.reports.commission');
     });
 
+    Route::post('/access/sync-now', function (Request $request, AccessSyncManager $manager): RedirectResponse {
+        abort_unless($request->user()?->canSyncDoorAccess(), 403);
+        $synced = $manager->syncPending(500);
+
+        Audit::record($request, 'access', 'manual_sync', null, null, null, [
+            'processed' => $synced,
+        ]);
+
+        return back()->with('success', $synced.' door access sync record(s) processed.');
+    })->name('access.sync-now');
+
     Route::middleware('permission:access.manage')->group(function () {
-        Route::post('/access/sync-now', function (Request $request, AccessSyncManager $manager): RedirectResponse {
-            $synced = $manager->syncPending(500);
-
-            Audit::record($request, 'access', 'manual_sync', null, null, null, [
-                'processed' => $synced,
-            ]);
-
-            return back()->with('success', $synced.' door access sync record(s) processed.');
-        })->name('access.sync-now');
-
         Route::get('/rfid-cards', [RfidCardController::class, 'index'])->name('rfid-cards.index');
         Route::get('/rfid-cards/history', [RfidCardController::class, 'history'])->name('rfid-cards.history');
         Route::get('/door-access/history', DoorAccessHistoryController::class)->name('door-access.history');

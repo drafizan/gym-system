@@ -155,6 +155,7 @@ class DailySalesReport
         return in_array($viewer->role?->name, [
             UserRole::Administrator->value,
             UserRole::Manager->value,
+            UserRole::Cashier->value,
         ], true);
     }
 

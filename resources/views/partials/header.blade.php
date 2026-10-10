@@ -37,7 +37,7 @@
                 <span>POS</span>
             </a>
         @endif
-        @if ($user?->hasPermission('access.manage'))
+        @if ($user?->canSyncDoorAccess())
             <form method="POST" action="{{ route('access.sync-now') }}">
                 @csrf
                 <button class="btn btn-primary header-quick-action" type="submit" title="Sync door access now">

@@ -25,6 +25,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\AccessSyncManager;
 use App\Support\Audit;
 use App\Support\BackupManager;
 use App\Support\DahuaBridgeHeartbeat;
@@ -3194,7 +3195,7 @@ test('daily sales report exports xlsx using current filters', function () {
         ->and($sheetXml)->toContain('Mineral Water 600ml');
 });
 
-test('cashier daily sales report is restricted to own transactions', function () {
+test('cashier daily sales report shows all transactions and supports staff filtering', function () {
     $cashierRole = Role::query()->create([
         'name' => 'cashier',
         'label' => 'Cashier',
@@ -3219,14 +3220,24 @@ test('cashier daily sales report is restricted to own transactions', function ()
         'product_items' => [['product_id' => $productTwo->id, 'quantity' => 1]],
     ]);
 
-    $report = app(DailySalesReport::class)->generate($cashierOne, [
+    $admin = User::factory()->create(['role_id' => Role::query()->create(['name' => 'administrator', 'label' => 'Administrator'])->id]);
+    app(SalesManager::class)->complete(staffRequestFor($admin), [
+        'sale_type' => SaleType::ProductSale->value,
+        'product_items' => [['product_id' => $productOne->id, 'quantity' => 1]],
+    ]);
+
+    $report = app(DailySalesReport::class)->generate($cashierOne, ['date' => now()->toDateString()]);
+    expect($report['summary']['total_revenue'])->toBe(39.0)
+        ->and($report['summary']['transaction_count'])->toBe(3)
+        ->and($report['filters']['cashier_id'])->toBeNull();
+
+    $filtered = app(DailySalesReport::class)->generate($cashierOne, [
         'date' => now()->toDateString(),
         'cashier_id' => $cashierTwo->id,
     ]);
+    expect($filtered['summary']['total_revenue'])->toBe(21.0)
+        ->and($filtered['filters']['cashier_id'])->toBe($cashierTwo->id);
 
-    expect($report['summary']['total_revenue'])->toBe(9.0)
-        ->and($report['summary']['transaction_count'])->toBe(1)
-        ->and($report['filters']['cashier_id'])->toBe($cashierOne->id);
 });
 
 test('dashboard backend calculates member and sales kpis from live records', function () {
@@ -3968,4 +3979,20 @@ it('requires verified device read and write for door online status', function ()
     expect($door->isOnline())->toBeFalse();
     Http::assertSentCount(3);
     Http::assertSent(fn ($request) => $request['command'] === 'handshake' && $request['door']['username'] === 'admin');
+});
+
+it('allows cashiers to manually sync doors without access management permission', function () {
+    $role = Role::query()->create(['name' => 'cashier', 'label' => 'Cashier']);
+    $user = User::factory()->create(['role_id' => $role->id, 'is_active' => true]);
+    expect($user->canSyncDoorAccess())->toBeTrue()->and($user->hasPermission('access.manage'))->toBeFalse();
+    $this->mock(AccessSyncManager::class, function ($mock) {
+        $mock->shouldReceive('syncPending')->once()->with(500)->andReturn(0);
+    });
+    $this->actingAs($user)->post(route('access.sync-now'))->assertRedirect()->assertSessionHas('success');
+    $this->actingAs($user)->get(route('rfid-cards.index'))->assertForbidden();
+});
+
+it('rejects door sync for staff without access permission or the cashier role', function () {
+    $user = User::factory()->create(['role_id' => Role::query()->create(['name' => 'viewer', 'label' => 'Viewer'])->id]);
+    $this->actingAs($user)->post(route('access.sync-now'))->assertForbidden();
 });
