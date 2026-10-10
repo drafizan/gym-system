@@ -3996,3 +3996,43 @@ it('rejects door sync for staff without access permission or the cashier role', 
     $user = User::factory()->create(['role_id' => Role::query()->create(['name' => 'viewer', 'label' => 'Viewer'])->id]);
     $this->actingAs($user)->post(route('access.sync-now'))->assertForbidden();
 });
+
+it('completes walk in access and merchandise with one payment', function () {
+    $cashier = User::factory()->create();
+    $member = Member::factory()->create();
+    $package = MembershipPackage::factory()->create(['is_walk_in' => true, 'duration_days' => 1, 'price' => 11]);
+    $water = Product::factory()->create(['selling_price' => 3, 'stock_quantity' => 10]);
+    $sale = app(SalesManager::class)->complete(staffRequestFor($cashier), [
+        'member_id' => $member->id,
+        'sale_type' => SaleType::WalkInSale->value,
+        'membership_package_id' => $package->id,
+        'product_items' => [['product_id' => $water->id, 'quantity' => 2, 'discount' => 1]],
+        'payment_method' => 'cash', 'payment_amount' => 16,
+    ]);
+    expect((float) $sale->subtotal)->toBe(17.0)
+        ->and((float) $sale->total)->toBe(16.0)
+        ->and($sale->items()->count())->toBe(2)
+        ->and($sale->payments()->count())->toBe(1)
+        ->and($water->fresh()->stock_quantity)->toBe(8)
+        ->and($member->memberships()->count())->toBe(1);
+});
+
+it('lets cashier checkout a walk in membership package and merchandise in one sale', function () {
+    $role = roleWithPermissions(['sales.manage']);
+    $role->update(['name' => 'cashier']);
+    $cashier = User::factory()->create(['role_id' => $role->id]);
+    $member = Member::factory()->create();
+    $package = MembershipPackage::factory()->create(['is_walk_in' => true, 'duration_days' => 1, 'price' => 6]);
+    $water = Product::factory()->create(['selling_price' => 3, 'stock_quantity' => 10]);
+    $this->actingAs($cashier)->get(route('sales.pos'))->assertOk()->assertSee('data-walk-in="1"', false);
+    $this->actingAs($cashier)->post(route('sales.store'), [
+        'sale_type' => 'membership_sale', 'member_id' => $member->id,
+        'membership_package_id' => $package->id,
+        'product_items' => [['product_id' => $water->id, 'quantity' => 1]], 'payment_method' => 'cash',
+    ])->assertSessionHasNoErrors()->assertRedirect();
+    $sale = Sale::query()->sole();
+    expect((float) $sale->total)->toBe(9.0)
+        ->and($sale->items()->count())->toBe(2)
+        ->and($sale->payments()->count())->toBe(1)
+        ->and($water->fresh()->stock_quantity)->toBe(9);
+});

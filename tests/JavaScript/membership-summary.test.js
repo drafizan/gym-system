@@ -87,3 +87,40 @@ test('locked PT checkout preserves PT sale type and selected package', () => {
     assert.equal(pt.checked, true);
     assert.equal(product.checked, false);
 });
+
+test('walk in checkout includes access fee and merchandise together', () => {
+    const start = source.indexOf('    const selectedItems = () => {');
+    const end = source.indexOf('    const syncItemMode = () => {', start);
+    const product = { label: 'Water', quantity: 2, unitPrice: 3, subtotal: 6, discount: 1 };
+    const result = vm.runInNewContext(source.slice(start, end) + '\nselectedItems();', {
+        selectedSaleType: () => 'walk_in_sale',
+        isWalkInMode: () => true,
+        isProductMode: () => false,
+        selectedOption: () => ({ dataset: { price: '11', label: 'Walk-in' } }),
+        packageSelect: { value: '1' },
+        form: { querySelector: () => null },
+        productItems: () => [product],
+    });
+    assert.equal(result.items.length, 2);
+    assert.equal(result.items.reduce((total, item) => total + item.subtotal - Number(item.discount || 0), 0), 16);
+});
+
+test('walk in membership package enables merchandise in normal membership sale', () => {
+    const start = source.indexOf('    const isWalkInMode =');
+    const end = source.indexOf('    const productLines =', start);
+    const option = { dataset: { walkIn: '1' } };
+    const result = vm.runInNewContext(source.slice(start, end) + '\nisWalkInMode("membership_sale");', {
+        selectedOption: () => option, packageSelect: {},
+    });
+    assert.equal(result, true);
+    const selectedStart = source.indexOf('    const selectedItems = () => {');
+    const selectedEnd = source.indexOf('    const syncItemMode =', selectedStart);
+    const summary = vm.runInNewContext(source.slice(selectedStart, selectedEnd) + '\nselectedItems();', {
+        selectedSaleType: () => 'membership_sale', isProductMode: () => false, isWalkInMode: () => true,
+        selectedOption: () => ({ dataset: { price: '6', label: 'Walk-in Senior Citizen' } }),
+        packageSelect: { value: '1' }, form: { querySelector: () => null },
+        productItems: () => [{ label: 'Water', subtotal: 3, discount: 0, quantity: 1, unitPrice: 3 }],
+    });
+    assert.equal(summary.items.length, 2);
+    assert.equal(summary.items.reduce((sum, item) => sum + item.subtotal, 0), 9);
+});

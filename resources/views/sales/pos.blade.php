@@ -142,6 +142,7 @@
                                 <option
                                     value="{{ $package->id }}"
                                     data-price="{{ (float) $package->price }}"
+                                    data-walk-in="{{ $package->is_walk_in ? '1' : '0' }}"
                                     data-label="{{ $package->name }}"
                                     @selected((string) old('membership_package_id', $checkout['membership_package_id'] ?? null) === (string) $package->id)
                                 >

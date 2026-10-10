@@ -790,6 +790,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
     const isPtSale = (saleType) => saleType === 'pt_session';
     const hasSelectedMember = () => Boolean(memberSelect?.value);
     const selectedOption = (select) => select?.options?.[select.selectedIndex];
+    const isWalkInMode = (saleType) => saleType === 'walk_in_sale' || (['membership_sale', 'membership_renewal'].includes(saleType) && selectedOption(packageSelect)?.dataset.walkIn === '1');
     const productLines = () => Array.from(form.querySelectorAll('[data-pos-product-line]'));
     const syncSaleTypeAvailability = () => {
         if (form.querySelector('[data-pos-checkout-locked]')) {
@@ -812,7 +813,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
     };
     const syncAvailableProducts = () => {
         const saleType = selectedSaleType();
-        const productMode = isProductMode(saleType);
+        const productMode = isProductMode(saleType) || isWalkInMode(saleType);
         const ptMode = isPtSale(saleType);
         const selectedValues = productLines()
             .map((line) => line.querySelector('[data-pos-product-select]')?.value)
@@ -897,22 +898,23 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         return {
             saleType,
             isProductSale,
-            items: unitPrice > 0 && packageSelect?.value ? [{
+            items: [...(unitPrice > 0 && packageSelect?.value ? [{
                 label,
                 quantity: 1,
                 unitPrice,
                 subtotal: unitPrice,
                 hasItem: true,
-            }] : [],
+            }] : []), ...(isWalkInMode(saleType) ? productItems() : [])],
         };
     };
 
     const syncItemMode = () => {
         const saleType = selectedSaleType();
         const isProductSale = isProductMode(saleType);
+        const allowsProducts = isProductSale || isWalkInMode(saleType);
 
         if (productRow) {
-            productRow.hidden = !isProductSale;
+            productRow.hidden = !allowsProducts;
         }
 
         if (packageRow) {
@@ -922,15 +924,15 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
         productLines().forEach((line) => {
             line.querySelectorAll('select, input, button').forEach((control) => {
                 if (control.matches('[data-pos-remove-product]')) {
-                    control.disabled = !isProductSale || productLines().length <= 1;
+                    control.disabled = !allowsProducts || productLines().length <= 1;
                     return;
                 }
 
-                control.disabled = !isProductSale;
+                control.disabled = !allowsProducts;
             });
         });
 
-        addProductButton?.toggleAttribute('disabled', !isProductSale);
+        addProductButton?.toggleAttribute('disabled', !allowsProducts);
 
         if (packageSelect) {
             packageSelect.disabled = isProductSale || !!form.querySelector('[data-pos-checkout-locked]');
@@ -948,9 +950,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
             selected.items.push({ label: 'Registration Fee', quantity: 1, unitPrice: amount, subtotal: amount, discount: 0 });
         }
         const subtotal = selected.items.reduce((sum, item) => sum + item.subtotal, 0);
-        const lineDiscount = selected.isProductSale
-            ? selected.items.reduce((sum, item) => sum + item.discount, 0)
-            : 0;
+        const lineDiscount = selected.items.reduce((sum, item) => sum + Number(item.discount || 0), 0);
         const maxCartDiscount = Math.max(0, subtotal - lineDiscount);
         let cartDiscount = Math.max(0, Number(discountInput?.value || 0));
 
@@ -982,7 +982,7 @@ document.querySelectorAll('[data-pos-form]').forEach((form) => {
                     <div class="pos-receipt-line">
                         <div>
                             <strong>${escapeHtml(item.label)}</strong>
-                            <span>${selected.isProductSale ? `${item.quantity} x ` : ''}${currency(item.unitPrice)}${item.discount > 0 ? `, discount ${currency(item.discount)}` : ''}</span>
+                            <span>${item.quantity} x ${currency(item.unitPrice)}${item.discount > 0 ? `, discount ${currency(item.discount)}` : ''}</span>
                         </div>
                         <b>${currency(item.subtotal)}</b>
                     </div>
