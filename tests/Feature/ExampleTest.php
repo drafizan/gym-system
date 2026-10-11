@@ -4074,3 +4074,38 @@ it('lets cashier checkout a walk in membership package and merchandise in one sa
         ->and($sale->payments()->count())->toBe(1)
         ->and($water->fresh()->stock_quantity)->toBe(9);
 });
+
+it('allows cashier walk in checkout without creating a member or membership', function () {
+    $role = roleWithPermissions(['sales.manage']);
+    $role->update(['name' => 'cashier']);
+    $cashier = User::factory()->create(['role_id' => $role->id]);
+    $package = MembershipPackage::factory()->create(['is_walk_in' => true, 'status' => 'active', 'duration_days' => 1, 'price' => 11]);
+    $water = Product::factory()->create(['selling_price' => 3, 'stock_quantity' => 10]);
+    $this->actingAs($cashier)->post(route('sales.store'), [
+        'sale_type' => 'membership_sale', 'member_id' => '',
+        'membership_package_id' => $package->id,
+        'product_items' => [['product_id' => $water->id, 'quantity' => 2]], 'payment_method' => 'cash',
+    ])->assertSessionHasNoErrors()->assertRedirect();
+    $sale = Sale::query()->sole();
+    expect($sale->member_id)->toBeNull()
+        ->and($sale->sale_type)->toBe('walk_in_sale')
+        ->and((float) $sale->total)->toBe(17.0)
+        ->and($sale->items()->count())->toBe(2)
+        ->and($sale->payments()->count())->toBe(1)
+        ->and(Member::query()->count())->toBe(0)
+        ->and(MemberMembership::query()->count())->toBe(0)
+        ->and(AccessSyncLog::query()->count())->toBe(0)
+        ->and($water->fresh()->stock_quantity)->toBe(8);
+});
+
+it('still requires a member for ordinary membership and renewal checkout', function () {
+    $cashier = User::factory()->create();
+    $ordinary = MembershipPackage::factory()->create(['is_walk_in' => false]);
+    $walkIn = MembershipPackage::factory()->create(['is_walk_in' => true]);
+    foreach ([['membership_sale', $ordinary], ['membership_renewal', $walkIn]] as [$type, $package]) {
+        expect(fn () => app(SalesManager::class)->complete(staffRequestFor($cashier), [
+            'sale_type' => $type, 'membership_package_id' => $package->id, 'payment_method' => 'cash',
+        ]))->toThrow(ValidationException::class);
+    }
+    expect(Sale::query()->count())->toBe(0);
+});

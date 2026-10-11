@@ -211,13 +211,32 @@ class SalesManager
      */
     private function createMembershipSaleItem(Request $request, Sale $sale, SaleType $saleType, ?Member $member, array $data): float
     {
+        $package = MembershipPackage::query()->findOrFail($data['membership_package_id'] ?? null);
+
+        if (! $member && $package->is_walk_in && $saleType !== SaleType::MembershipRenewal) {
+            if ($package->status !== RecordStatus::Active->value) {
+                throw ValidationException::withMessages(['membership_package_id' => 'Inactive walk-in packages cannot be sold.']);
+            }
+            $amount = (float) $package->price;
+            $sale->forceFill(['sale_type' => SaleType::WalkInSale->value])->save();
+            $sale->items()->create([
+                'membership_package_id' => $package->id,
+                'description' => $package->name,
+                'quantity' => 1,
+                'unit_price' => $amount,
+                'total' => $amount,
+                'metadata' => ['walk_in' => true, 'duration_days' => $package->duration_days],
+            ]);
+
+            return $amount;
+        }
+
         if (! $member) {
             throw ValidationException::withMessages([
                 'member_id' => 'A member is required for membership sales.',
             ]);
         }
 
-        $package = MembershipPackage::query()->findOrFail($data['membership_package_id'] ?? null);
         $startDate = Carbon::parse($data['start_date'] ?? now())->startOfDay();
         $endDate = ! empty($data['end_date'])
             ? Carbon::parse($data['end_date'])->startOfDay()
