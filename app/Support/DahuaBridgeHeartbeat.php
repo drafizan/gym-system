@@ -290,7 +290,18 @@ class DahuaBridgeHeartbeat
     private function pidBelongsToBridge(int $pid): bool
     {
         if (PHP_OS_FAMILY === 'Windows') {
-            return false;
+            $powershell = (new ExecutableFinder)->find('powershell') ?? 'powershell';
+            $process = new Process([
+                $powershell,
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                '$process = Get-CimInstance Win32_Process -Filter "ProcessId = '.$pid.'"; '.
+                'if ($process -and $process.CommandLine -like "*dahua_sdk_bridge.py*") { exit 0 }; exit 1',
+            ]);
+            $process->run();
+
+            return $process->isSuccessful();
         }
 
         $process = new Process(['ps', '-p', (string) $pid, '-o', 'command=']);
@@ -306,6 +317,13 @@ class DahuaBridgeHeartbeat
     private function terminateBridge(int $pid): void
     {
         if (! $this->pidBelongsToBridge($pid)) {
+            return;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            (new Process(['taskkill', '/PID', (string) $pid, '/T', '/F']))->run();
+            File::delete($this->pidFile());
+
             return;
         }
 

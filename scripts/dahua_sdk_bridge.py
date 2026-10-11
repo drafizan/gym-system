@@ -11,6 +11,8 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import socket
+import sys
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1527,6 +1529,45 @@ class DahuaSdk:
 
 
 SDK: DahuaSdk
+BRIDGE_MUTEX_HANDLE: int | None = None
+
+
+def claim_single_instance() -> bool:
+    """Prevent multiple Windows bridge processes from sharing the same port."""
+    global BRIDGE_MUTEX_HANDLE
+
+    if os.name != "nt":
+        return True
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_bool
+
+    handle = kernel32.CreateMutexW(None, False, "Local\\GymDahuaSdkBridge")
+    error = ctypes.get_last_error()
+
+    if not handle:
+        raise ctypes.WinError(error)
+
+    if error == 183:  # ERROR_ALREADY_EXISTS
+        kernel32.CloseHandle(handle)
+        return False
+
+    BRIDGE_MUTEX_HANDLE = int(handle)
+
+    return True
+
+
+class ExclusiveThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+
+        super().server_bind()
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -1534,7 +1575,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/health":
-            self._json(200, {"ok": True, "sdk_path": SDK.sdk_path})
+            self._json(200, {"ok": True, "pid": os.getpid(), "sdk_path": SDK.sdk_path})
             return
 
         self._json(404, {"ok": False, "message": "Not found"})
@@ -1585,10 +1626,23 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
             self._json(200, {"ok": True, "command": command, **result})
         except Exception as exc:
+            timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+            print(
+                f"[{timestamp}] [dahua-bridge:{os.getpid()}] ERROR {self.command} {self.path}: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
             self._json(500, {"ok": False, "message": str(exc)})
 
     def log_message(self, format: str, *args: Any) -> None:
-        print(f"[dahua-bridge] {self.address_string()} {format % args}")
+        if self.path == "/health":
+            return
+
+        timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+        print(
+            f"[{timestamp}] [dahua-bridge:{os.getpid()}] {self.address_string()} {format % args}",
+            flush=True,
+        )
 
     def _json(self, status: int, body: dict[str, Any]) -> None:
         encoded = json.dumps(body).encode()
@@ -1601,11 +1655,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     global SDK
+
+    if not claim_single_instance():
+        print("Dahua bridge is already running; duplicate process exiting.", file=sys.stderr, flush=True)
+        return
+
     host = os.environ.get("DAHUA_BRIDGE_HOST", "127.0.0.1")
     port = int(os.environ.get("DAHUA_BRIDGE_PORT", "8787"))
     # Bind first: permission errors or an occupied port must not initialize the
     # native SDK and its background threads.
-    server = ThreadingHTTPServer((host, port), BridgeHandler)
+    server = ExclusiveThreadingHTTPServer((host, port), BridgeHandler)
     server.daemon_threads = False
     initialized = False
     try:
